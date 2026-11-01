@@ -7,7 +7,8 @@ No accounts, no calendar access, no backend: a static site for GitHub Pages.
 ## Two ways to use it
 
 **Ad hoc (default).** Open the page, type who is joining and the city each person is
-in right now, and plan. Nothing is saved anywhere: refresh and it is gone.
+in right now (with suggestions; accents optional, country names and time zones like
+`Europe/Warsaw` work too), and plan. Nothing is saved anywhere: refresh and it is gone.
 
 **Private group (optional).** Click *Save as private group…*, keep the password, and the
 group is encrypted into a private link (`…/#p=<ciphertext>`). Bookmark it. Opening the
@@ -83,7 +84,7 @@ site/
   js/crypto.js     PBKDF2 + AES-GCM, password generation
   js/vault.js      optional remembered key, retry delay
   js/invite.js     message, .ics, Google/Outlook/email links
-  js/cities.js     city picker list
+  js/cities.js     city lookup: curated cities, spellings, countries, browser zones
   js/app.js        UI
 tests/
 ```

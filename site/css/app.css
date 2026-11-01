@@ -796,3 +796,8 @@ dialog::backdrop { background: rgb(14 17 36 / 0.55); }
   .r-row { grid-template-columns: 1fr 1fr; }
   .r-row .check { grid-column: 1 / -1; }
 }
+
+.city-hint { min-height: 1.2em; font-family: var(--font-mono); font-size: 0.72rem; }
+.city-hint.warn { color: var(--bad); font-family: var(--font-body); font-size: 0.8rem; }
+.r-row { align-items: start; }
+.r-row > .check, .r-row > .btn { margin-top: 22px; }
