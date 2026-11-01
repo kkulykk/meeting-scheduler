@@ -651,13 +651,18 @@ dialog::backdrop { background: rgb(14 17 36 / 0.55); }
 
 [hidden] { display: none !important; }
 
+/* Centred on the page, a little above the middle so it reads as the main thing. */
 .lock {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 140px);
   max-width: 1180px;
   margin: 0 auto;
-  padding: clamp(24px, 8vh, 80px) clamp(16px, 4vw, 40px) 60px;
+  padding: 24px clamp(16px, 4vw, 40px) 10vh;
 }
 
 .lock-card {
+  width: 100%;
   max-width: 520px;
   display: grid;
   gap: 16px;
