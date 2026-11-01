@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Meeting Scheduler</title>
+  <meta name="description" content="Find a call time that works for 2 to 5 friends across time zones, then send the invite.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23262c5e'/%3E%3Cstop offset='.5' stop-color='%23e97a6a'/%3E%3Cstop offset='1' stop-color='%2386c5f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='10' width='28' height='12' rx='6' fill='url(%23g)'/%3E%3Crect x='13' y='6' width='6' height='20' rx='2' fill='none' stroke='%23171b34' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip" href="#roster">Skip to the plan</a>
+
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Meeting Scheduler</span>
+      <span class="chip mode-chip" id="mode-chip" hidden>Private preset</span>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="clock-toggle" aria-pressed="false">12-hour clock</button>
+    </div>
+  </header>
+
+  <section class="lock" id="unlock" hidden aria-labelledby="unlock-title">
+    <div class="lock-card">
+      <div class="lock-art" aria-hidden="true"><span></span></div>
+      <h1 id="unlock-title">This is a private group</h1>
+      <p class="lock-text">Enter the password to open it. Without it, this link shows nothing.</p>
+      <form id="unlock-form" class="lock-form" novalidate>
+        <div class="field">
+          <label for="unlock-pass">Password</label>
+          <input id="unlock-pass" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
+        </div>
+        <label class="check" for="unlock-remember">
+          <input id="unlock-remember" type="checkbox">
+          Remember on this device (only on your own phone or computer)
+        </label>
+        <p class="form-error" id="unlock-error" role="alert"></p>
+        <p class="form-wait" id="unlock-wait" aria-live="polite"></p>
+        <div class="lock-actions">
+          <button type="submit" class="btn primary" id="unlock-btn">Unlock</button>
+          <button type="button" class="btn ghost" id="unlock-skip">Start an empty plan instead</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <div id="app" hidden>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title"></h1>
+      <p class="lede" id="hero-lede"></p>
+    </section>
+
+    <section class="invite" id="invite" hidden aria-labelledby="invite-title">
+      <div class="invite-body">
+        <p class="eyebrow">You were sent a time</p>
+        <h2 id="invite-title"></h2>
+        <p class="invite-when" id="invite-when"></p>
+        <p class="invite-count" id="invite-count"></p>
+      </div>
+      <div class="invite-actions">
+        <a class="btn primary" id="invite-ics" download="call.ics" href="#">Add to my calendar</a>
+        <a class="btn" id="invite-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
+        <a class="btn" id="invite-join" target="_blank" rel="noopener" href="#" hidden>Join call</a>
+        <button type="button" class="btn ghost" id="invite-close">Dismiss</button>
+      </div>
+    </section>
+
+    <section class="roster" id="roster" aria-labelledby="roster-title">
+      <div class="section-head">
+        <h2 id="roster-title">Who's on the call</h2>
+        <span class="roster-count" id="roster-count"></span>
+      </div>
+      <div class="roster-rows" id="roster-rows"></div>
+      <div class="roster-foot">
+        <button type="button" class="btn" id="roster-add">Add a person</button>
+        <span class="spacer"></span>
+        <div class="mode-note" id="adhoc-note">
+          <p>Nothing here is saved. Refresh the page and it's gone.</p>
+          <button type="button" class="btn primary" id="save-preset">Save as private group…</button>
+        </div>
+        <div class="mode-note preset" id="preset-note" hidden>
+          <p id="preset-text">Saved inside its private link. Anyone who opens it needs the password.</p>
+          <div class="lock-actions">
+            <button type="button" class="btn primary" id="copy-preset">Copy private link</button>
+            <button type="button" class="btn" id="lock-btn">Lock</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p class="notice" id="dst-notice" hidden role="note"></p>
+
+    <div id="plan" class="plan">
+    <section class="now" aria-labelledby="now-title">
+      <div class="section-head">
+        <h2 id="now-title">Right now</h2>
+      </div>
+      <ul class="now-list" id="now-list"></ul>
+    </section>
+
+    <section class="planner" id="planner" aria-labelledby="planner-title">
+      <div class="section-head">
+        <h2 id="planner-title">Pick a time</h2>
+        <div class="days" id="days" role="group" aria-label="Day"></div>
+      </div>
+      <div class="ribbon-wrap" id="ribbon-wrap" tabindex="0"
+           aria-label="Timeline. Use the left and right arrow keys to move the selected time.">
+        <div class="ribbon" id="ribbon"></div>
+      </div>
+      <ul class="legend" aria-label="Legend">
+        <li><span class="sw st-free"></span>Free</li>
+        <li><span class="sw st-edge"></span>Early or late</li>
+        <li><span class="sw st-work"></span>At work</li>
+        <li><span class="sw st-asleep"></span>Asleep</li>
+        <li class="legend-note">The colour of each strip is that person's sky at that hour.</li>
+      </ul>
+    </section>
+
+    <div class="lower">
+      <section class="suggest" aria-labelledby="suggest-title">
+        <div class="section-head">
+          <h2 id="suggest-title">Best times this week</h2>
+        </div>
+        <ol class="suggest-list" id="suggest-list"></ol>
+      </section>
+
+      <section class="call" aria-labelledby="call-title">
+        <div class="section-head">
+          <h2 id="call-title">Your call</h2>
+          <span class="pill" id="call-verdict"></span>
+        </div>
+        <p class="call-when" id="call-when"></p>
+        <ul class="call-times" id="call-times"></ul>
+
+        <div class="fields">
+          <div class="field">
+            <label for="f-title">Title</label>
+            <input id="f-title" type="text" maxlength="80" value="Catch-up call">
+          </div>
+          <div class="field">
+            <label for="f-duration">Length</label>
+            <select id="f-duration">
+              <option value="30">30 min</option>
+              <option value="45">45 min</option>
+              <option value="60" selected>1 hour</option>
+              <option value="90">1½ hours</option>
+              <option value="120">2 hours</option>
+            </select>
+          </div>
+          <div class="field wide">
+            <label for="f-link">Call link (optional)</label>
+            <input id="f-link" type="url" maxlength="500" placeholder="Paste a Meet, Zoom, Discord or WhatsApp link">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn primary" id="a-copy">Copy message</button>
+          <button type="button" class="btn" id="a-share" hidden>Share…</button>
+          <button type="button" class="btn" id="a-link" title="Shows the time in each friend's own zone. Contains no names.">Copy time link</button>
+          <a class="btn" id="a-ics" download="call.ics" href="#">Download .ics</a>
+          <a class="btn" id="a-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
+          <a class="btn" id="a-outlook" target="_blank" rel="noopener" href="#">Outlook</a>
+          <a class="btn" id="a-email" href="#">Email</a>
+        </div>
+
+        <details class="preview" open>
+          <summary>Message preview</summary>
+          <pre id="msg-preview"></pre>
+        </details>
+      </section>
+    </div>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <p>Nothing about your friends is stored or sent anywhere. Private groups are encrypted (AES-256-GCM) inside their own link.</p>
+  </footer>
+  </div>
+
+  <dialog id="preset-dialog" aria-labelledby="pd-title">
+    <form id="preset-form" class="lock-form dialog-body" novalidate>
+      <h2 id="pd-title">Save as a private group</h2>
+      <p class="hint">Your group is encrypted into a private link. Bookmark it. Opening it asks for this password, and nothing is stored anywhere else.</p>
+      <div class="field">
+        <label for="pd-pass">Password</label>
+        <div class="pass-row">
+          <input id="pd-pass" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" required>
+          <button type="button" class="btn small" id="pd-copy">Copy</button>
+          <button type="button" class="btn small ghost" id="pd-regen">New one</button>
+        </div>
+        <p class="field-hint">We generated a strong one. You can type your own instead (at least 14 characters).</p>
+      </div>
+      <label class="check" for="pd-saved">
+        <input id="pd-saved" type="checkbox">
+        I saved this password. If it is lost, the group cannot be opened.
+      </label>
+      <label class="check" for="pd-remember">
+        <input id="pd-remember" type="checkbox">
+        Remember on this device
+      </label>
+      <p class="form-error" id="pd-error" role="alert"></p>
+      <div class="lock-actions">
+        <button type="submit" class="btn primary" id="pd-btn">Create private link</button>
+        <button type="button" class="btn ghost" id="pd-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
