@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Common Hour</title>
+  <meta name="description" content="Find a call time that works for 2 to 5 friends across time zones, then send the invite.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23262c5e'/%3E%3Cstop offset='.5' stop-color='%23e97a6a'/%3E%3Cstop offset='1' stop-color='%2386c5f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='10' width='28' height='12' rx='6' fill='url(%23g)'/%3E%3Crect x='13' y='6' width='6' height='20' rx='2' fill='none' stroke='%23171b34' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip" href="#planner">Skip to the timeline</a>
+
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Common Hour</span>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="clock-toggle" aria-pressed="false">12-hour clock</button>
+      <button type="button" class="btn" id="share-group">Copy group link</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title"></h1>
+      <p class="lede" id="hero-lede"></p>
+    </section>
+
+    <section class="invite" id="invite" hidden aria-labelledby="invite-title">
+      <div class="invite-body">
+        <p class="eyebrow">You were sent a time</p>
+        <h2 id="invite-title"></h2>
+        <p class="invite-when" id="invite-when"></p>
+        <p class="invite-count" id="invite-count"></p>
+      </div>
+      <div class="invite-actions">
+        <a class="btn primary" id="invite-ics" download="call.ics" href="#">Add to my calendar</a>
+        <a class="btn" id="invite-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
+        <a class="btn" id="invite-join" target="_blank" rel="noopener" href="#" hidden>Join call</a>
+        <button type="button" class="btn ghost" id="invite-close">Plan another time</button>
+      </div>
+    </section>
+
+    <p class="notice" id="dst-notice" hidden role="note"></p>
+
+    <section class="now" aria-labelledby="now-title">
+      <div class="section-head">
+        <h2 id="now-title">Right now</h2>
+        <span class="chip" id="example-chip" hidden>Example friends</span>
+        <button type="button" class="btn" id="edit-group">Edit friends</button>
+      </div>
+      <ul class="now-list" id="now-list"></ul>
+    </section>
+
+    <section class="planner" id="planner" aria-labelledby="planner-title">
+      <div class="section-head">
+        <h2 id="planner-title">Pick a time</h2>
+        <div class="days" id="days" role="group" aria-label="Day"></div>
+      </div>
+      <div class="ribbon-wrap" id="ribbon-wrap" tabindex="0"
+           aria-label="Timeline. Use the left and right arrow keys to move the selected time.">
+        <div class="ribbon" id="ribbon"></div>
+      </div>
+      <ul class="legend" aria-label="Legend">
+        <li><span class="sw st-free"></span>Free</li>
+        <li><span class="sw st-edge"></span>Early or late</li>
+        <li><span class="sw st-work"></span>At work</li>
+        <li><span class="sw st-asleep"></span>Asleep</li>
+        <li class="legend-note">The colour of each strip is that person's sky at that hour.</li>
+      </ul>
+    </section>
+
+    <div class="lower">
+      <section class="suggest" aria-labelledby="suggest-title">
+        <div class="section-head">
+          <h2 id="suggest-title">Best times this week</h2>
+        </div>
+        <ol class="suggest-list" id="suggest-list"></ol>
+      </section>
+
+      <section class="call" aria-labelledby="call-title">
+        <div class="section-head">
+          <h2 id="call-title">Your call</h2>
+          <span class="pill" id="call-verdict"></span>
+        </div>
+        <p class="call-when" id="call-when"></p>
+        <ul class="call-times" id="call-times"></ul>
+
+        <div class="fields">
+          <div class="field">
+            <label for="f-title">Title</label>
+            <input id="f-title" type="text" maxlength="80" value="Catch-up call">
+          </div>
+          <div class="field">
+            <label for="f-duration">Length</label>
+            <select id="f-duration">
+              <option value="30">30 min</option>
+              <option value="45">45 min</option>
+              <option value="60" selected>1 hour</option>
+              <option value="90">1½ hours</option>
+              <option value="120">2 hours</option>
+            </select>
+          </div>
+          <div class="field wide">
+            <label for="f-link">Call link (optional)</label>
+            <input id="f-link" type="url" maxlength="500" placeholder="Paste a Meet, Zoom, Discord or WhatsApp link">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn primary" id="a-copy">Copy message</button>
+          <button type="button" class="btn" id="a-share" hidden>Share…</button>
+          <button type="button" class="btn" id="a-link">Copy link</button>
+          <a class="btn" id="a-ics" download="call.ics" href="#">Download .ics</a>
+          <a class="btn" id="a-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
+          <a class="btn" id="a-outlook" target="_blank" rel="noopener" href="#">Outlook</a>
+          <a class="btn" id="a-email" href="#">Email</a>
+        </div>
+
+        <details class="preview" open>
+          <summary>Message preview</summary>
+          <pre id="msg-preview"></pre>
+        </details>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <p>No accounts and no calendars. Your group lives in the link and in this browser.</p>
+  </footer>
+
+  <dialog id="group-dialog" aria-labelledby="gd-title">
+    <form method="dialog" id="group-form">
+      <h2 id="gd-title">Your friends</h2>
+      <p class="hint">2 to 5 people. Wake and bed times keep the suggestions humane.</p>
+      <div id="gd-rows" class="gd-rows"></div>
+      <div class="gd-foot">
+        <button type="button" class="btn" id="gd-add">Add friend</button>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button type="submit" class="btn primary" value="save">Save friends</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
