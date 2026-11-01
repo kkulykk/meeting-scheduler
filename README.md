@@ -1,94 +1,108 @@
 # Meeting Scheduler
 
-Find a call time that works for 2 to 5 friends spread across time zones
-(say New Orleans, Oxford, Warsaw, Vienna and Kyiv), then send the invite.
-No accounts, no calendar access, no backend: a static site for GitHub Pages.
+**Find a time that works for everyone, wherever they are.**
 
-## Two ways to use it
+Meeting Scheduler helps small groups of friends spread across time zones agree on a
+call time in a minute, without sign-ups, without connecting calendars, and without
+the usual "is that your time or mine?" back-and-forth.
 
-**Ad hoc (default).** Open the page, type who is joining and the city each person is
-in right now (with suggestions; accents optional, country names and time zones like
-`Europe/Warsaw` work too), and plan. Nothing is saved anywhere: refresh and it is gone.
+**Try it:** https://kkulykk.github.io/meeting-scheduler/
 
-**Private group (optional).** Click *Save as private group…*, keep the password, and the
-group is encrypted into a private link (`…/#p=<ciphertext>`). Bookmark it. Opening the
-link asks for the password; without it the page shows nothing about the group.
-Edits re-encrypt the group into a new link in the address bar, so bookmark again or
-copy it after changing people. Old links keep opening the old version.
+---
 
-## Features
+## The problem
 
-- **Right now**: each person's local time, offset from you, and whether they are
-  free, at work or asleep.
-- **Timeline**: one strip per person for the chosen day, coloured like their sky at
-  each hour, with a status bar (free, early or late, at work, asleep). The bottom row
-  scores the whole group. Click to pick a start time, or use the arrow keys.
-- **Best times this week**: the top four slots, ranked so nobody is woken up and the
-  worst-off person is as comfortable as possible.
-- **Your call**: everyone's local time for the slot, plus *Copy message* (for WhatsApp
-  or Telegram), *Copy time link*, *Download .ics*, *Google Calendar*, *Outlook*, *Email*.
-- **Time links** (`#t=…`) open a focused invite screen: the call in the reader's own time
-  with a countdown, *Add to calendar*, *Google*, *Outlook* and *Join call*, plus the other
-  cities' local times. They carry the time, title, call link and **city names only, never
-  people's names**, so friends need no password. *Plan a different time* opens the planner
-  with those cities filled in.
-- **Who's on the call** collapses to a one-line summary (private groups open collapsed).
-- **24h / 12h** switch in the header.
-- **Clock-change warnings**: the US and Europe change clocks on different dates; the
-  app warns three weeks ahead.
+When friends live in New Orleans, London, Warsaw, Vienna and Kyiv, the gap between
+the furthest two is eight hours. Someone is always about to go to bed, still at work,
+or not awake yet. Working that out by hand in a group chat takes several rounds of
+messages, and daylight-saving changes, which happen on different dates in the US and
+Europe, quietly break calls that used to work.
 
-## Security
+## How it works
 
-| Piece | How it is protected |
-|---|---|
-| Ad-hoc plans | Kept in memory only. No cookies, no storage, nothing in the URL. Only the 12/24-hour preference is saved |
-| Private group link | PBKDF2-SHA256 (600 000 iterations, random 128-bit salt) derives an AES-256-GCM key. Random IV per save; version and salt are authenticated, so any edit to a link is rejected. Padded to 256 bytes so length does not reveal name lengths |
-| Where it lives | Only inside the link's `#` fragment, which browsers never send to any server. Nothing about the group is stored on the device |
-| "Remember on this device" | Off by default. When ticked, only the key is kept, in IndexedDB as a **non-extractable** WebCrypto key. **Lock** forgets it |
-| Password | The suggested one has about 99 bits of randomness (`k7qm-2xpd-9rtw-h4zc-m3va`); your own must be at least 14 characters. After 3 wrong tries the page makes you wait, doubling each time |
-| Page hardening | Strict Content-Security-Policy (own scripts only, no inline script, no network calls), `no-referrer`, `noindex` plus `robots.txt`, refuses to run in frames, every decrypted field re-validated, all text rendered as text |
+1. **Add who's joining.** Type each person's name and the city they're in right now.
+   Two to five people.
+2. **Pick a time.** See everyone's day side by side, coloured like their sky. The app
+   suggests the best times this week, the ones where nobody is woken up or stuck at work.
+3. **Send it.** Copy a ready-made message for WhatsApp or Telegram, or share a link that
+   opens in each friend's own time zone, with a one-tap *Add to calendar*.
 
-**Use it safely:** keep the password in a password manager, and give it to friends
-through a different channel than the link.
+## What friends see
 
-**Honest limits**
+The link you send opens a clean invite: the call in *their* local time, a countdown,
+buttons for Google Calendar, Outlook or any calendar app, a *Join call* button if you
+added one, and what time it will be for everyone else. No account and no password
+needed.
 
-- Someone with the private link *and* the password can read the group. That is the design.
-- A leaked private link can be attacked offline, where the retry delay does not apply.
-  The slow key derivation and a strong password are what stop that; with the generated
-  password it is out of reach.
-- The copied invite message lists names and times. Once pasted into a chat, email or
-  calendar, that service stores it.
-- A private repository keeps the code private, but GitHub Pages sites are public unless
-  you have GitHub Enterprise Cloud. That is fine: the code holds no secrets.
-- A forgotten password cannot be recovered. Recreate the group.
+## Highlights
 
-## Run locally
+- **No sign-up, nothing to install.** It works in any browser, on phone or laptop.
+- **No calendar access.** Nobody has to connect or share their calendar.
+- **Smart suggestions.** Respects each person's wake-up time, bedtime and working hours.
+- **Clock-change warnings.** Alerts you when the US and Europe switch clocks on
+  different dates, so recurring calls don't drift.
+- **Type any city.** Hundreds of cities, with or without accents, plus country names.
+- **Your format.** Switch between 24-hour and 12-hour times.
+
+## Private groups for the people you call often
+
+Plain planning saves nothing. Close the page and it's gone.
+
+For a group you talk to regularly, you can **save it as a private group** behind a
+password. You get a private link to bookmark. Anyone who opens it without the password
+sees nothing about the group.
+
+## Privacy, in plain words
+
+- **We never see your data.** There are no accounts and no database, and nothing about
+  your friends is sent to a server.
+- **Planning is temporary.** What you type stays on your screen and disappears when you
+  close or refresh the page.
+- **Private groups are locked with your password.** The group is encrypted inside its
+  own link with strong, industry-standard encryption. Without the password, the link
+  is unreadable. The password is never stored anywhere, so keep it in a password manager.
+- **Invites stay discreet.** Invite links contain only the time, the call details and
+  city names, never people's names.
+
+Good habits: share the password separately from the link, and only tick
+*Remember on this device* on your own phone or computer.
+
+## Questions
+
+**Does everyone need to install something or sign up?**
+No. Everyone just opens a link.
+
+**What if someone is travelling?**
+Enter the city they'll be in. Times are always based on where each person is *right now*.
+
+**What if I forget the password for a private group?**
+It can't be recovered, by design. Create the group again; it takes a minute.
+
+**How many people can join?**
+Two to five per plan.
+
+**Does it cost anything?**
+No.
+
+---
+
+## Running it yourself
+
+Meeting Scheduler is a static website with no server. To publish your own copy:
+fork this repository, then in **Settings → Pages** set the source to **GitHub Actions**.
+Every change merged to `main` is tested and published automatically.
+
+To try it locally:
 
 ```bash
-npm start      # serves ./site on http://localhost:3000
-npm test       # time-zone, scoring, encryption, link and .ics tests (Node 20+)
+npm start
 ```
 
-## Deploy to GitHub Pages
+Run the tests with:
 
-1. In the repository, open **Settings → Pages** and set **Source** to **GitHub Actions**.
-2. Merge to `main`. The workflow in `.github/workflows/deploy.yml` runs the tests and
-   publishes `site/` to `https://<user>.github.io/meeting-scheduler/`.
-
-## Layout
-
+```bash
+npm test
 ```
-site/
-  index.html
-  css/app.css
-  js/time.js       Intl-based zone math, DST detection, formatting
-  js/schedule.js   availability and slot scoring
-  js/state.js      people model, validation, time links
-  js/crypto.js     PBKDF2 + AES-GCM, password generation
-  js/vault.js      optional remembered key, retry delay
-  js/invite.js     message, .ics, Google/Outlook/email links
-  js/cities.js     city lookup: curated cities, spellings, countries, browser zones
-  js/app.js        UI
-tests/
-```
+
+Developer notes on how the timing, suggestions and encryption work live alongside the
+code in the `site/js/` folder.
