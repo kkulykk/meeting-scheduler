@@ -3,7 +3,7 @@ import {
   hourLabel, offsetLabel, hoursPhrase, diffLabel, relativePhrase,
 } from './time.js';
 import { SLOT_MIN, statusAt, scanSlots, slotScore, pickSuggestions, verdict, compromises } from './schedule.js';
-import { CITIES } from './cities.js';
+import { CITIES, resolveCity, cityOptions } from './cities.js';
 import {
   MIN_PEOPLE, MAX_PEOPLE, toPayload, fromPayload, buildTimeHash, readTimeHash, loadPrefs, savePrefs,
 } from './state.js';
@@ -589,34 +589,63 @@ $('clock-toggle').addEventListener('click', () => {
 
 // ---------- Who's on the call (inline editor) ----------
 
-const zoneOptions = (() => {
-  try {
-    return Intl.supportedValuesOf('timeZone');
-  } catch {
-    return [];
-  }
-})();
 const HOURS_WAKE = [5, 6, 7, 8, 9, 10, 11, 12];
 const HOURS_BED = [20, 21, 22, 23, 24, 25, 26, 27];
 
-function citySelect(id, row, onchange) {
-  const sel = el('select', { id, onchange });
-  sel.append(el('option', { value: '', selected: !row.tz }, 'Choose a city…'));
-  const cities = el('optgroup', { label: 'Cities' });
-  let matched = false;
-  CITIES.forEach((c, i) => {
-    const on = !matched && c.city === row.city && c.tz === row.tz;
-    matched ||= on;
-    cities.append(el('option', { value: `c:${i}`, selected: on }, `${c.city} (${c.tz.split('/')[0]})`));
+/** One shared suggestion list for every city box. */
+function ensureCityOptions() {
+  if ($('city-options')) return;
+  document.body.append(el('datalist', { id: 'city-options' },
+    ...cityOptions().map((o) => el('option', { value: o.value, label: o.label }))));
+}
+
+function cityHint(r) {
+  return r.tz ? `${r.tz.replace(/_/g, ' ')} · ${offsetLabel(offsetMinutes(r.tz, Date.now()))}` : '';
+}
+
+/** Free-text city box with suggestions; resolves to a time zone as you type. */
+function cityInput(id, r) {
+  ensureCityOptions();
+  const hintId = `${id}-hint`;
+  const hint = el('p', { id: hintId, class: 'field-hint city-hint', text: cityHint(r) });
+  let timer = null;
+  const apply = (e, final) => {
+    const text = e.target.value;
+    const hit = resolveCity(text);
+    const changed = (hit?.tz ?? null) !== r.tz || (hit && hit.city !== r.city);
+    if (hit) {
+      r.city = hit.city;
+      r.tz = hit.tz;
+      if (final) e.target.value = hit.city;
+      hint.textContent = cityHint(r);
+      hint.classList.remove('warn');
+    } else {
+      r.city = text.trim();
+      r.tz = null;
+      hint.textContent = !text.trim() ? ''
+        : final ? 'No match. Try a nearby bigger city, the country, or a zone like Europe/Warsaw.'
+          : 'Keep typing or pick a suggestion.';
+      hint.classList.toggle('warn', Boolean(final && text.trim()));
+    }
+    if (changed) {
+      clearTimeout(timer);
+      timer = setTimeout(rosterChanged, final ? 0 : 250);
+    }
+  };
+  const input = el('input', {
+    id,
+    type: 'text',
+    list: 'city-options',
+    value: r.city,
+    placeholder: 'Type a city, e.g. Kraków',
+    autocomplete: 'off',
+    autocapitalize: 'words',
+    spellcheck: 'false',
+    'aria-describedby': hintId,
+    oninput: (e) => apply(e, false),
+    onchange: (e) => apply(e, true),
   });
-  sel.append(cities);
-  const zones = el('optgroup', { label: 'All time zones' });
-  const list = row.tz && !zoneOptions.includes(row.tz) ? [row.tz, ...zoneOptions] : zoneOptions;
-  for (const z of list) {
-    zones.append(el('option', { value: `z:${z}`, selected: !matched && z === row.tz }, z.replace(/_/g, ' ')));
-  }
-  sel.append(zones);
-  return sel;
+  return [input, hint];
 }
 
 function formatHourOption(h) {
@@ -660,19 +689,7 @@ function renderRoster() {
         })),
       el('div', { class: 'field grow' },
         el('label', { for: id('city'), text: 'City right now' }),
-        citySelect(id('city'), r, (e) => {
-          const v = e.target.value;
-          if (!v) {
-            r.tz = null;
-            r.city = '';
-          } else if (v.startsWith('c:')) {
-            Object.assign(r, { city: CITIES[Number(v.slice(2))].city, tz: CITIES[Number(v.slice(2))].tz });
-          } else {
-            r.tz = v.slice(2);
-            r.city = r.tz.split('/').pop().replace(/_/g, ' ');
-          }
-          rosterChanged();
-        })),
+        ...cityInput(id('city'), r)),
       el('div', { class: 'field' },
         el('label', { for: id('wake'), text: 'Wakes' }),
         hourSelect(id('wake'), HOURS_WAKE, r.wake, (e) => {
