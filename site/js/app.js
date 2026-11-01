@@ -20,6 +20,8 @@ if (window.top !== window.self) {
 import { buildMessage, buildIcs, googleCalendarUrl, outlookUrl, mailtoUrl } from './invite.js';
 
 const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+/** Readable zone name; some browsers still report Kyiv by its old spelling. */
+const zoneName = (tz) => tz.replace(/Kiev$/, 'Kyiv').replace(/_/g, ' ');
 const $ = (id) => document.getElementById(id);
 
 function el(tag, attrs = {}, ...kids) {
@@ -86,7 +88,6 @@ const state = {
   link: '',
   duration: 60,
   selected: null,
-  invite: null,
   dayIndex: 0,
 };
 
@@ -108,8 +109,10 @@ function people() {
 }
 const ready = () => people().length >= MIN_PEOPLE;
 
-const timeUrl = () =>
-  base() + buildTimeHash({ t: state.selected, d: state.duration, n: state.title, l: state.link });
+const timeUrl = () => base() + buildTimeHash({
+  t: state.selected, d: state.duration, n: state.title, l: state.link,
+  places: ordered().map((p) => ({ city: p.city, tz: p.tz })), // cities only, never names
+});
 
 let saveTimer = null;
 let presetSaves = 0;
@@ -296,7 +299,7 @@ function renderRibbon() {
   // Row 1: axis in the viewer's own time.
   place(el('div', { class: 'r-label axis-label' },
     el('span', { class: 'r-name', text: 'Your time' }),
-    el('span', { class: 'r-city', text: viewerTz.split('/').pop().replace(/_/g, ' ') })), 1, 1);
+    el('span', { class: 'r-city', text: zoneName(viewerTz).split('/').pop() })), 1, 1);
   for (let c = 0; c < n; c++) {
     const t = start + c * SLOT_MIN * MIN;
     const p = partsIn(viewerTz, t);
@@ -352,7 +355,25 @@ function renderRibbon() {
     beam.style.gridRow = '1 / -1';
     beam.style.gridColumn = `${col + 2} / span ${span}`;
     nodes.push(beam);
+    ribbonSel = { col, span };
+
+    // Exact times, since the grid only has a tick every 3 hours.
+    const endMs = state.selected + state.duration * MIN;
+    place(el('div', { class: 'beam-label', 'aria-hidden': 'true' },
+      `${formatTime(viewerTz, state.selected, state.h12)}–${formatTime(viewerTz, endMs, state.h12)}`), 1, col + 2, span);
+    people.forEach((person, r) => {
+      place(el('div', { class: 'beam-time', 'aria-hidden': 'true' },
+        formatTime(person.tz, state.selected, state.h12)), r + 2, col + 2, span);
+    });
+  } else {
+    ribbonSel = null;
   }
+
+  // Shows the time under the pointer, in the viewer's zone.
+  hoverLabel = el('div', { class: 'hover-time', 'aria-hidden': 'true', hidden: true });
+  hoverLabel.style.gridRow = '1';
+  nodes.push(hoverLabel);
+  ribbonStart = start;
 
   // A thin line at the current moment, on today's view.
   if (now >= start && now < end) {
@@ -383,6 +404,24 @@ function scrollRibbonToSelection() {
     wrap.scrollLeft = Math.max(0, beam.offsetLeft - wrap.clientWidth / 2);
   });
 }
+
+let hoverLabel = null;
+let ribbonSel = null;
+let ribbonStart = 0;
+
+$('ribbon').addEventListener('mouseover', (e) => {
+  const target = e.target.closest('[data-ms]');
+  if (!target || !hoverLabel) return;
+  const ms = Number(target.dataset.ms);
+  const col = Math.round((ms - ribbonStart) / (SLOT_MIN * MIN));
+  const onBeam = ribbonSel && col >= ribbonSel.col && col < ribbonSel.col + ribbonSel.span;
+  hoverLabel.hidden = Boolean(onBeam);
+  hoverLabel.style.gridColumn = `${col + 2} / span 1`;
+  hoverLabel.textContent = formatTime(viewerTz, ms, state.h12);
+});
+$('ribbon').addEventListener('mouseleave', () => {
+  if (hoverLabel) hoverLabel.hidden = true;
+});
 
 $('ribbon').addEventListener('click', (e) => {
   const target = e.target.closest('[data-ms]');
@@ -492,35 +531,82 @@ function writeOutputs(people, t, url) {
   $('a-email').href = mailtoUrl({ title: state.title, body: message });
 }
 
-// ---------- Invite banner (opened from a shared link) ----------
+// ---------- Invite screen (opened from a time link) ----------
 
-function renderInvite() {
-  const box = $('invite');
-  if (!state.invite) {
-    box.hidden = true;
-    return;
-  }
-  const t = state.invite.t;
-  const event = {
-    title: state.title, start: t, durationMin: state.duration, link: state.link,
-    description: state.link ? `Join: ${state.link}` : '',
-  };
-  $('invite-title').textContent = state.title;
-  $('invite-when').textContent =
-    `${formatLongDay(viewerTz, t)} at ${formatTime(viewerTz, t, state.h12)} your time (${viewerTz.replace(/_/g, ' ')})`;
-  $('invite-count').textContent = `${relativePhrase(Date.now(), t)} · ${state.duration} min`;
-  const blob = URL.createObjectURL(new Blob([buildIcs(event)], { type: 'text/calendar' }));
-  $('invite-ics').href = blob;
-  $('invite-google').href = googleCalendarUrl(event);
-  $('invite-join').hidden = !state.link;
-  if (state.link) $('invite-join').href = state.link;
-  box.hidden = false;
+let invite = null; // { t, d, n, l, places } read from the link
+let inviteIcs = null;
+
+function showInvite(data) {
+  invite = data;
+  $('unlock').hidden = true;
+  $('app').hidden = true;
+  $('invite-view').hidden = false;
+  renderInviteView();
 }
 
-$('invite-close').addEventListener('click', () => {
-  state.invite = null;
-  renderInvite();
-  if (state.mode === 'adhoc') history.replaceState(null, '', base());
+function renderInviteView() {
+  if (!invite) return;
+  const now = Date.now();
+  const t = invite.t;
+  const dur = invite.d ?? 60;
+  const end = t + dur * MIN;
+  const title = invite.n ?? 'Catch-up call';
+
+  // The card is painted with the viewer's own sky at the hour of the call.
+  const local = partsIn(viewerTz, t);
+  const h = local.hour + local.minute / 60;
+  const tone = sky(h);
+  const card = $('iv-card');
+  card.style.setProperty('--iv-a', sky((h + 22.5) % 24).bg);
+  card.style.setProperty('--iv-b', tone.bg);
+  card.style.setProperty('--iv-c', sky((h + 1.5) % 24).bg);
+  card.dataset.tone = tone.ink === '#171b34' ? 'light' : 'dark';
+
+  const live = now >= t && now < end;
+  const over = now >= end;
+  $('iv-eyebrow').textContent = live ? 'Happening now' : over ? 'This call has ended' : "You're invited";
+  $('iv-title').textContent = title;
+  $('iv-day').textContent = formatLongDay(viewerTz, t);
+  $('iv-time').textContent = formatTime(viewerTz, t, state.h12);
+  $('iv-zone').textContent =
+    `Your time, until ${formatTime(viewerTz, end, state.h12)} · ${zoneName(viewerTz)} (${offsetLabel(offsetMinutes(viewerTz, t))})`;
+  $('iv-count').textContent = live
+    ? `Started ${relativePhrase(now, t).replace(/^started /, '')} · ${dur} min`
+    : over ? `Ended ${relativePhrase(now, end).replace(/^started /, '')}` : `Starts ${relativePhrase(now, t)} · ${dur} min`;
+
+  const event = { title, start: t, durationMin: dur, link: invite.l, description: invite.l ? `Join: ${invite.l}` : '' };
+  if (inviteIcs) URL.revokeObjectURL(inviteIcs);
+  inviteIcs = URL.createObjectURL(new Blob([buildIcs(event)], { type: 'text/calendar' }));
+  $('iv-ics').href = inviteIcs;
+  $('iv-ics').download = `${title.replace(/[^\w-]+/g, '-').toLowerCase() || 'call'}.ics`;
+  $('iv-google').href = googleCalendarUrl(event);
+  $('iv-outlook').href = outlookUrl(event);
+  $('iv-join').hidden = !invite.l || over;
+  if (invite.l) $('iv-join').href = invite.l;
+  for (const id of ['iv-ics', 'iv-google', 'iv-outlook']) $(id).hidden = over;
+
+  const places = (invite.places ?? []).slice().sort((a, b) => offsetMinutes(a.tz, t) - offsetMinutes(b.tz, t));
+  const myOff = offsetMinutes(viewerTz, t);
+  const myDay = formatDay(viewerTz, t);
+  $('iv-others').hidden = places.length === 0;
+  $('iv-places').replaceChildren(...places.map((p) => {
+    const pt = partsIn(p.tz, t);
+    const s = sky(pt.hour + pt.minute / 60);
+    const day = formatDay(p.tz, t);
+    const same = offsetMinutes(p.tz, t) === myOff;
+    return el('li', { class: same ? 'mine' : null, style: { '--sky': s.bg } },
+      el('span', { class: 'ivp-city', text: p.city }),
+      el('span', { class: 'ivp-time', text: formatTime(p.tz, t, state.h12) }),
+      el('span', { class: 'ivp-day', text: same ? 'your time' : day === myDay ? '' : day.split(' ')[0] }));
+  }));
+}
+
+$('iv-plan').addEventListener('click', () => {
+  const from = invite;
+  invite = null;
+  $('invite-view').hidden = true;
+  history.replaceState(null, '', base());
+  startAdhoc(from);
 });
 
 // ---------- Form fields and actions ----------
@@ -578,14 +664,22 @@ if (navigator.share) {
 }
 
 function renderClockToggle() {
-  $('clock-toggle').setAttribute('aria-pressed', String(state.h12));
+  $('clock-24').setAttribute('aria-pressed', String(!state.h12));
+  $('clock-12').setAttribute('aria-pressed', String(state.h12));
 }
-$('clock-toggle').addEventListener('click', () => {
-  state.h12 = !state.h12;
-  savePrefs({ h12: state.h12 });
+
+function setClock(h12) {
+  if (state.h12 === h12) return;
+  state.h12 = h12;
+  savePrefs({ h12 });
+  renderClockToggle();
+  if (invite) return renderInviteView();
   renderRoster();
   renderAll();
-});
+}
+$('clock-24').addEventListener('click', () => setClock(false));
+$('clock-12').addEventListener('click', () => setClock(true));
+renderClockToggle();
 
 // ---------- Who's on the call (inline editor) ----------
 
@@ -600,7 +694,7 @@ function ensureCityOptions() {
 }
 
 function cityHint(r) {
-  return r.tz ? `${r.tz.replace(/_/g, ' ')} · ${offsetLabel(offsetMinutes(r.tz, Date.now()))}` : '';
+  return r.tz ? `${zoneName(r.tz)} · ${offsetLabel(offsetMinutes(r.tz, Date.now()))}` : '';
 }
 
 /** Free-text city box with suggestions; resolves to a time zone as you type. */
@@ -730,6 +824,33 @@ function renderRoster() {
   $('roster-count').textContent = `${state.roster.length} of ${MAX_PEOPLE}`;
 }
 
+// Collapsing: a one-line summary of the group stands in for the editor.
+let rosterOpen = true;
+
+function setRosterOpen(open) {
+  rosterOpen = open || !ready(); // cannot collapse an unfinished group
+  renderRosterSummary();
+}
+
+function renderRosterSummary() {
+  const open = rosterOpen || !ready();
+  $('roster-body').hidden = !open;
+  $('roster-add').hidden = !open;
+  $('roster-summary').hidden = open;
+  $('roster-toggle').hidden = !ready();
+  $('roster-toggle').setAttribute('aria-expanded', String(open));
+  $('roster-toggle-text').textContent = open ? 'Collapse' : 'Edit';
+  if (open) return;
+  $('roster-summary').replaceChildren(...ordered().map((p) => el('span', { class: 'rs-person' },
+    el('b', { text: p.name }), el('span', { text: p.city }))));
+}
+
+$('roster-toggle').addEventListener('click', () => setRosterOpen(!rosterOpen));
+$('roster-summary').addEventListener('click', () => {
+  setRosterOpen(true);
+  $('roster-rows').querySelector('input')?.focus();
+});
+
 $('roster-add').addEventListener('click', () => {
   if (state.roster.length >= MAX_PEOPLE) return;
   const row = makeRow();
@@ -753,7 +874,7 @@ function renderMode() {
 function renderAll() {
   renderClockToggle();
   renderHero();
-  renderInvite();
+  renderRosterSummary();
   renderMode();
   const ok = ready();
   $('plan').hidden = !ok;
@@ -783,19 +904,23 @@ function showApp() {
 
 // ---------- Ad-hoc mode ----------
 
-function startAdhoc(invite) {
+/** Empty planner, or one pre-filled from a time link's cities and time. */
+function startAdhoc(from) {
   state.mode = 'adhoc';
   vault.key = null;
   vault.salt = null;
   const mine = CITIES.find((c) => c.tz === viewerTz)
-    ?? { city: viewerTz.split('/').pop().replace(/_/g, ' '), tz: viewerTz };
-  state.roster = [makeRow({ city: mine.city, tz: mine.tz }), makeRow()];
-  if (invite) {
-    state.invite = { t: invite.t };
-    state.selected = invite.t;
-    state.title = invite.n ?? 'Catch-up call';
-    state.link = invite.l ?? '';
-    state.duration = invite.d ?? 60;
+    ?? { city: zoneName(viewerTz).split('/').pop(), tz: viewerTz };
+  const fromLink = (from?.places ?? []).map((p) => makeRow(p));
+  state.roster = fromLink.length >= MIN_PEOPLE
+    ? fromLink
+    : [makeRow({ city: mine.city, tz: mine.tz }), makeRow()];
+  rosterOpen = true;
+  if (from) {
+    state.selected = from.t;
+    state.title = from.n ?? 'Catch-up call';
+    state.link = from.l ?? '';
+    state.duration = from.d ?? 60;
   }
   showApp();
   syncFields();
@@ -902,6 +1027,7 @@ function enterPreset(key, salt, payload) {
   state.link = payload.l ?? '';
   state.duration = payload.d ?? 60;
   presetSaves = 1;
+  rosterOpen = false;
   showApp();
   syncFields();
   renderRoster();
@@ -973,12 +1099,15 @@ async function start() {
     toast('That private link is damaged or incomplete. Ask for it again.');
     return;
   }
-  startAdhoc(readTimeHash(params));
+  const timeLink = readTimeHash(params);
+  if (timeLink) return showInvite(timeLink);
+  startAdhoc(null);
 }
 
 start();
 
 setInterval(() => {
+  if (invite) return renderInviteView();
   if ($('app').hidden || !ready()) return;
   if (Date.now() >= dayStarts[1]) {
     recompute();
@@ -987,7 +1116,6 @@ setInterval(() => {
   }
   renderNow();
   renderRibbon();
-  if (state.invite) $('invite-count').textContent = `${relativePhrase(Date.now(), state.invite.t)} · ${state.duration} min`;
 }, 60 * 1000);
 
 window.addEventListener('hashchange', () => location.reload());

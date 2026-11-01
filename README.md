@@ -27,9 +27,13 @@ copy it after changing people. Old links keep opening the old version.
   worst-off person is as comfortable as possible.
 - **Your call**: everyone's local time for the slot, plus *Copy message* (for WhatsApp
   or Telegram), *Copy time link*, *Download .ics*, *Google Calendar*, *Outlook*, *Email*.
-- **Time links** (`#t=…`) show the call in the reader's own time zone with a countdown
-  and an add-to-calendar button. They contain only the time, title and call link,
-  never names, so friends need no password to open them.
+- **Time links** (`#t=…`) open a focused invite screen: the call in the reader's own time
+  with a countdown, *Add to calendar*, *Google*, *Outlook* and *Join call*, plus the other
+  cities' local times. They carry the time, title, call link and **city names only, never
+  people's names**, so friends need no password. *Plan a different time* opens the planner
+  with those cities filled in.
+- **Who's on the call** collapses to a one-line summary (private groups open collapsed).
+- **24h / 12h** switch in the header.
 - **Clock-change warnings**: the US and Europe change clocks on different dates; the
   app warns three weeks ahead.
 

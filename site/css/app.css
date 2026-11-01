@@ -227,29 +227,8 @@ main > *, .lower > * { min-width: 0; }
 
 .lede { margin: 0; max-width: 58ch; color: var(--muted); font-size: 1.05rem; }
 
-/* ---------- Invite banner and notices ---------- */
+/* ---------- Eyebrow and notices ---------- */
 
-.invite {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  padding: 22px 24px;
-  border-radius: var(--radius);
-  background:
-    linear-gradient(100deg, rgb(20 26 61 / 0.92), rgb(109 79 145 / 0.88) 55%, rgb(233 122 106 / 0.85)),
-    #141a3d;
-  color: #f4f3fb;
-}
-.invite[hidden] { display: none; }
-.invite-body { display: grid; gap: 4px; }
-.invite h2 { font-size: 1.6rem; font-stretch: 80%; }
-.invite-when { margin: 0; font-size: 1.05rem; }
-.invite-count { margin: 0; font: 500 0.9rem/1.4 var(--font-mono); opacity: 0.85; }
-.invite-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.invite .btn { background: rgb(255 255 255 / 0.12); color: #fff; border-color: rgb(255 255 255 / 0.3); }
-.invite .btn.primary { background: #fff; color: #141a3d; border-color: #fff; }
 .eyebrow {
   margin: 0;
   font: 600 0.75rem/1 var(--font-body);
@@ -672,13 +651,18 @@ dialog::backdrop { background: rgb(14 17 36 / 0.55); }
 
 [hidden] { display: none !important; }
 
+/* Centred on the page, a little above the middle so it reads as the main thing. */
 .lock {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 140px);
   max-width: 1180px;
   margin: 0 auto;
-  padding: clamp(24px, 8vh, 80px) clamp(16px, 4vw, 40px) 60px;
+  padding: 24px clamp(16px, 4vw, 40px) 10vh;
 }
 
 .lock-card {
+  width: 100%;
   max-width: 520px;
   display: grid;
   gap: 16px;
@@ -801,3 +785,191 @@ dialog::backdrop { background: rgb(14 17 36 / 0.55); }
 .city-hint.warn { color: var(--bad); font-family: var(--font-body); font-size: 0.8rem; }
 .r-row { align-items: start; }
 .r-row > .check, .r-row > .btn { margin-top: 22px; }
+
+/* ---------- Clock format switch ---------- */
+
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+}
+.seg-btn {
+  min-width: 46px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 0.85rem/1 var(--font-mono);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.seg-btn:hover { color: var(--ink); }
+.seg-btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* ---------- Collapsible roster ---------- */
+
+.roster-head .roster-toggle { margin-left: auto; }
+.roster-toggle .chev { transition: transform 0.2s; }
+.roster-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.roster-body { display: grid; gap: 10px; }
+
+.roster-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.rs-person {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 0.9rem;
+}
+.rs-person span { color: var(--muted); font-size: 0.82rem; }
+.roster-summary:hover .rs-person { border-color: var(--ink); }
+
+/* ---------- Invite screen ---------- */
+
+.invite-view {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(20px, 6vh, 64px) clamp(16px, 4vw, 40px) 64px;
+  display: grid;
+  gap: 22px;
+}
+
+.iv-card {
+  --iv-a: #262c5e;
+  --iv-b: #6d4f91;
+  --iv-c: #e97a6a;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 44px);
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--iv-a), var(--iv-b) 55%, var(--iv-c));
+  color: #f4f3fb;
+  overflow: hidden;
+}
+.iv-card[data-tone="light"] { color: #171b34; }
+.iv-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 40%;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.14), transparent);
+  pointer-events: none;
+}
+.iv-card > * { position: relative; z-index: 1; }
+.iv-card h1 {
+  font: 760 clamp(1.8rem, 5vw, 2.8rem)/1 var(--font-display);
+  font-stretch: 80%;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.iv-when { display: grid; gap: 2px; }
+.iv-day { margin: 0; font-size: 1.1rem; font-weight: 600; }
+.iv-time {
+  margin: 0;
+  font: 500 clamp(2.6rem, 9vw, 4.4rem)/1.05 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.iv-zone { margin: 0; font-size: 0.9rem; opacity: 0.85; }
+.iv-count { margin: 0; font: 500 0.9rem/1.4 var(--font-mono); opacity: 0.9; }
+
+.iv-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.iv-actions .btn {
+  background: rgb(255 255 255 / 0.16);
+  border-color: rgb(255 255 255 / 0.35);
+  color: inherit;
+  backdrop-filter: blur(4px);
+}
+.iv-actions .btn:hover { background: rgb(255 255 255 / 0.26); border-color: currentColor; }
+.iv-actions .btn.primary { background: #fff; border-color: #fff; color: #141a3d; }
+.iv-card[data-tone="light"] .iv-actions .btn { background: rgb(255 255 255 / 0.55); border-color: rgb(23 27 52 / 0.18); }
+.iv-card[data-tone="light"] .iv-actions .btn.primary { background: #171b34; border-color: #171b34; color: #fff; }
+
+.iv-others h2 { margin-bottom: 10px; }
+.iv-places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.iv-places li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.iv-places li::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: var(--sky);
+}
+.iv-places li.mine { border-color: var(--ink); }
+.ivp-city { font-weight: 600; font-size: 0.9rem; overflow-wrap: anywhere; }
+.ivp-time { font: 500 1.5rem/1.15 var(--font-mono); font-variant-numeric: tabular-nums; }
+.ivp-day { color: var(--muted); font-size: 0.78rem; min-height: 1.1em; }
+
+.invite-view .linkish { justify-self: start; font-size: 0.92rem; }
+
+/* ---------- Exact times on the selection ---------- */
+
+.beam-label, .hover-time, .beam-time {
+  z-index: 5;
+  justify-self: center;
+  align-self: center;
+  white-space: nowrap;
+  pointer-events: none;
+  font: 600 0.72rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.beam-label {
+  align-self: start;
+  margin-top: -6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+}
+.hover-time {
+  align-self: start;
+  margin-top: -2px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.beam-time {
+  margin-top: -6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.92);
+  color: #171b34;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
