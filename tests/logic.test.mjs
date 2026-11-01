@@ -4,7 +4,7 @@ import {
   offsetMinutes, zonedToUtc, localDayStarts, clockChanges, formatTime, hoursPhrase, offsetLabel, HOUR,
 } from '../site/js/time.js';
 import { statusAt, scanSlots, pickSuggestions, verdict } from '../site/js/schedule.js';
-import { EXAMPLE_GROUP, toPayload, fromPayload } from '../site/js/state.js';
+import { EXAMPLE_GROUP, toPayload, fromPayload, buildTimeHash, readTimeHash } from '../site/js/state.js';
 import { buildIcs, foldLine } from '../site/js/invite.js';
 
 test('offsets follow DST per zone', () => {
@@ -71,6 +71,15 @@ test('payload round trip validates everything, including Cyrillic names', () => 
   assert.equal(fromPayload({ g: [['A', 'X', 'Not/AZone', 8, 23, 1]] }), null);
   assert.equal(fromPayload({ ...toPayload({ people: group }), l: 'javascript:alert(1)' }).l, undefined);
   assert.equal(fromPayload('nope'), null);
+});
+
+test('public time links carry the time only, never people', () => {
+  const hash = buildTimeHash({ t: Date.UTC(2026, 10, 8, 17), d: 45, n: 'Catch-up', l: 'https://meet.example/abc' });
+  assert.equal(hash, '#t=2026-11-08T17%3A00Z&d=45&n=Catch-up&l=https%3A%2F%2Fmeet.example%2Fabc');
+  const back = readTimeHash(new URLSearchParams(hash.slice(1)));
+  assert.deepEqual(back, { t: Date.UTC(2026, 10, 8, 17), d: 45, n: 'Catch-up', l: 'https://meet.example/abc' });
+  assert.equal(readTimeHash(new URLSearchParams('t=nope')), null);
+  assert.equal(readTimeHash(new URLSearchParams('t=2026-11-08T17:00Z&l=javascript:alert(1)')).l, undefined);
 });
 
 test('ics output', () => {

@@ -5,12 +5,11 @@ import {
 import { SLOT_MIN, statusAt, scanSlots, slotScore, pickSuggestions, verdict, compromises } from './schedule.js';
 import { CITIES } from './cities.js';
 import {
-  EXAMPLE_GROUP, MIN_PEOPLE, MAX_PEOPLE, cleanGroup, toPayload, fromPayload, loadPrefs, savePrefs,
+  MIN_PEOPLE, MAX_PEOPLE, toPayload, fromPayload, buildTimeHash, readTimeHash, loadPrefs, savePrefs,
 } from './state.js';
 import { seal, open, peek, newSalt, deriveKey, generatePassphrase, passphraseProblem } from './crypto.js';
 import {
-  loadBlob, saveBlob, takeLegacyGroup, rememberedKey, rememberKey, forgetKey, wipeDevice,
-  lockoutRemaining, recordFailure, clearFailures,
+  cleanupLegacy, rememberedKey, rememberKey, forgetKey, lockoutRemaining, recordFailure, clearFailures,
 } from './vault.js';
 
 // Refuse to run inside someone else's frame (clickjacking).
@@ -62,13 +61,26 @@ function sky(hour) {
 }
 
 // ---------- State ----------
+// Ad-hoc mode (default): people live in memory only; a refresh clears them.
+// Preset mode: the group is encrypted into the page's own #p= link, opened with a password.
 
 const prefs = loadPrefs();
 const prefers12 = ['h11', 'h12'].includes(new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle);
 
+let uid = 0;
+const makeRow = (p = {}) => ({
+  id: ++uid,
+  name: p.name ?? '',
+  city: p.city ?? '',
+  tz: p.tz ?? null,
+  wake: p.wake ?? 8,
+  bed: p.bed ?? 23,
+  work: p.work ?? true,
+});
+
 const state = {
-  people: [],
-  isExample: false,
+  mode: 'adhoc',
+  roster: [],
   h12: prefs.h12 ?? prefers12,
   title: 'Catch-up call',
   link: '',
@@ -78,45 +90,61 @@ const state = {
   dayIndex: 0,
 };
 
-/** The group's key lives only in memory (and, if chosen, as a non-extractable key on this device). */
-const vault = { key: null, salt: null, remember: true };
+/** A preset's key lives in memory, and on this device only if "Remember" was ticked. */
+const vault = { key: null, salt: null };
 
 let dayStarts = [];
 let slots = [];
 let suggestions = [];
 let firstRibbon = true;
-let currentShareUrl = '';
-let currentGroupUrl = '';
 
 const base = () => location.origin + location.pathname;
 
-async function encryptedUrl(payload) {
-  return `${base()}#e=${await seal(vault.key, vault.salt, toPayload(payload))}`;
+/** Rows that have a city, with blank names filled in. */
+function people() {
+  return state.roster
+    .map((r, i) => ({ ...r, name: r.name.trim() || (i === 0 ? 'You' : `Friend ${i + 1}`) }))
+    .filter((r) => r.tz);
+}
+const ready = () => people().length >= MIN_PEOPLE;
+
+const timeUrl = () =>
+  base() + buildTimeHash({ t: state.selected, d: state.duration, n: state.title, l: state.link });
+
+let saveTimer = null;
+let presetSaves = 0;
+
+function schedulePresetSave() {
+  if (state.mode !== 'preset') return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(savePreset, 400);
 }
 
-let persistSeq = 0;
-async function persist() {
-  savePrefs({ h12: state.h12 });
-  if (!vault.key || state.isExample) return;
-  const seq = ++persistSeq;
-  const saved = await seal(vault.key, vault.salt, toPayload({
-    people: state.people, d: state.duration, n: state.title, l: state.link,
+/** Re-encrypts the group into the address bar. Nothing is written to storage. */
+async function savePreset() {
+  clearTimeout(saveTimer);
+  if (state.mode !== 'preset' || !vault.key || !ready()) return;
+  const token = await seal(vault.key, vault.salt, toPayload({
+    people: people(), d: state.duration, n: state.title, l: state.link,
   }));
-  const groupUrl = await encryptedUrl({ people: state.people });
-  if (seq !== persistSeq) return;
-  if (vault.remember) saveBlob(saved);
-  currentGroupUrl = groupUrl;
+  history.replaceState(null, '', `${base()}#p=${token}`);
+  presetSaves += 1;
+  if (presetSaves > 1) {
+    $('preset-text').textContent =
+      'Changes saved into a new private link. Bookmark this page again or copy the link. Old links still open the old version.';
+  }
 }
 
 /** Friends ordered west to east, so the timeline reads like a map. */
 function ordered() {
   const now = Date.now();
-  return state.people
+  return people()
     .map((p, i) => ({ ...p, i, off: offsetMinutes(p.tz, now) }))
     .sort((a, b) => a.off - b.off || a.i - b.i);
 }
 
 function recompute() {
+  if (!ready()) return;
   const now = Date.now();
   dayStarts = localDayStarts(viewerTz, now, 7);
   slots = scanSlots(ordered(), dayStarts[0], dayStarts[7], state.duration);
@@ -143,27 +171,25 @@ function select(ms) {
 // ---------- Hero ----------
 
 function renderHero() {
-  const people = ordered();
-  const west = people[0];
-  const east = people[people.length - 1];
-  const gap = east.off - west.off;
   const title = $('hero-title');
   title.replaceChildren();
-  if (gap === 0) {
+  if (!ready()) {
+    title.append('Plan a call across time zones.');
+    $('hero-lede').textContent =
+      'Add who is joining and the city each person is in right now. Nothing is saved: refresh and it is gone.';
+    return;
+  }
+  const list = ordered();
+  const west = list[0];
+  const east = list[list.length - 1];
+  const gap = east.off - west.off;
+  if (gap === 0 || west.city === east.city) {
     title.append('Everyone is on the same clock.');
   } else {
-    title.append(
-      el('span', { class: 'gap', text: hoursPhrase(gap) }),
-      ` between ${west.city} and ${east.city}.`,
-    );
+    title.append(el('span', { class: 'gap', text: hoursPhrase(gap) }), ` between ${west.city} and ${east.city}.`);
   }
   $('hero-lede').textContent =
-    `See each friend's day side by side, find an hour that suits all ${people.length} of you, and send the invite.`;
-  $('example-chip').hidden = !state.isExample;
-  $('create-own').hidden = !state.isExample;
-  $('lock-btn').hidden = state.isExample;
-  $('share-group').hidden = state.isExample;
-  $('a-link').hidden = state.isExample;
+    `See each person's day side by side, find an hour that suits all ${list.length} of you, and send the invite.`;
 }
 
 // ---------- Right now ----------
@@ -293,7 +319,7 @@ function renderRibbon() {
       place(el('div', {
         class: cls,
         'data-ms': t,
-        style: { background: s.bg, color: s.ink },
+        style: { background: s.bg, color: s.ink, '--i': c },
         title: `${person.name}: ${formatDay(person.tz, t)} ${formatTime(person.tz, t, state.h12)} · ${st.label}`,
       }, label ? el('span', { class: 'hl', text: label }) : null), row, c + 2);
     }
@@ -446,21 +472,10 @@ function renderCall() {
     }),
   );
 
-  currentShareUrl = '';
-  writeOutputs(people, t, '');
-  if (vault.key && !state.isExample) {
-    const seq = ++callSeq;
-    encryptedUrl({ people: state.people, t, d: state.duration, n: state.title, l: state.link }).then((url) => {
-      if (seq !== callSeq) return;
-      currentShareUrl = url;
-      writeOutputs(people, t, url);
-    });
-  }
+  writeOutputs(people, t, timeUrl());
 }
 
-let callSeq = 0;
-
-/** Message, .ics and calendar links. `url` is the encrypted link, or '' in example mode. */
+/** Message, .ics and calendar links. `url` is the public time link (no names in it). */
 function writeOutputs(people, t, url) {
   const message = buildMessage({
     title: state.title, start: t, durationMin: state.duration, people, link: state.link, url, h12: state.h12,
@@ -488,10 +503,7 @@ function renderInvite() {
   const t = state.invite.t;
   const event = {
     title: state.title, start: t, durationMin: state.duration, link: state.link,
-    description: buildMessage({
-      title: state.title, start: t, durationMin: state.duration, people: ordered(),
-      link: state.link, url: '', h12: state.h12,
-    }),
+    description: state.link ? `Join: ${state.link}` : '',
   };
   $('invite-title').textContent = state.title;
   $('invite-when').textContent =
@@ -508,8 +520,7 @@ function renderInvite() {
 $('invite-close').addEventListener('click', () => {
   state.invite = null;
   renderInvite();
-  persist();
-  $('planner').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  if (state.mode === 'adhoc') history.replaceState(null, '', base());
 });
 
 // ---------- Form fields and actions ----------
@@ -517,19 +528,19 @@ $('invite-close').addEventListener('click', () => {
 $('f-title').addEventListener('input', (e) => {
   state.title = e.target.value.trim() || 'Catch-up call';
   renderCall();
-  persist();
+  schedulePresetSave();
 });
 $('f-link').addEventListener('input', (e) => {
   const v = e.target.value.trim();
   state.link = /^https?:\/\//i.test(v) ? v : '';
   renderCall();
-  persist();
+  schedulePresetSave();
 });
 $('f-duration').addEventListener('change', (e) => {
   state.duration = Number(e.target.value);
   recompute();
   renderAll();
-  persist();
+  schedulePresetSave();
 });
 
 let toastTimer;
@@ -556,15 +567,8 @@ async function copy(text, done) {
 }
 
 $('a-copy').addEventListener('click', () => copy($('msg-preview').textContent, 'Message copied. Paste it in your group chat.'));
-$('a-link').addEventListener('click', () => {
-  if (state.isExample) return toast('Create your own group to share links.');
-  if (!currentShareUrl) return toast('Still encrypting the link. Try again in a moment.');
-  copy(currentShareUrl, 'Encrypted link copied. Friends need the group passphrase to open it.');
-});
-$('share-group').addEventListener('click', () => {
-  if (!currentGroupUrl) return toast('Still encrypting the link. Try again in a moment.');
-  copy(currentGroupUrl, 'Encrypted group link copied. Send the passphrase separately.');
-});
+$('a-link').addEventListener('click', () =>
+  copy(timeUrl(), 'Time link copied. It shows the time in each friend\'s own zone and contains no names.'));
 
 if (navigator.share) {
   $('a-share').hidden = false;
@@ -578,11 +582,12 @@ function renderClockToggle() {
 }
 $('clock-toggle').addEventListener('click', () => {
   state.h12 = !state.h12;
+  savePrefs({ h12: state.h12 });
+  renderRoster();
   renderAll();
-  persist();
 });
 
-// ---------- Edit friends dialog ----------
+// ---------- Who's on the call (inline editor) ----------
 
 const zoneOptions = (() => {
   try {
@@ -594,28 +599,24 @@ const zoneOptions = (() => {
 const HOURS_WAKE = [5, 6, 7, 8, 9, 10, 11, 12];
 const HOURS_BED = [20, 21, 22, 23, 24, 25, 26, 27];
 
-function citySelect(id, person) {
-  const sel = el('select', { id });
+function citySelect(id, row, onchange) {
+  const sel = el('select', { id, onchange });
+  sel.append(el('option', { value: '', selected: !row.tz }, 'Choose a city…'));
   const cities = el('optgroup', { label: 'Cities' });
   let matched = false;
   CITIES.forEach((c, i) => {
-    const on = !matched && c.city === person?.city && c.tz === person?.tz;
+    const on = !matched && c.city === row.city && c.tz === row.tz;
     matched ||= on;
     cities.append(el('option', { value: `c:${i}`, selected: on }, `${c.city} (${c.tz.split('/')[0]})`));
   });
   sel.append(cities);
   const zones = el('optgroup', { label: 'All time zones' });
-  const zoneList = person && !zoneOptions.includes(person.tz) ? [person.tz, ...zoneOptions] : zoneOptions;
-  for (const z of zoneList) {
-    zones.append(el('option', { value: `z:${z}`, selected: !matched && z === person?.tz }, z.replace(/_/g, ' ')));
+  const list = row.tz && !zoneOptions.includes(row.tz) ? [row.tz, ...zoneOptions] : zoneOptions;
+  for (const z of list) {
+    zones.append(el('option', { value: `z:${z}`, selected: !matched && z === row.tz }, z.replace(/_/g, ' ')));
   }
   sel.append(zones);
   return sel;
-}
-
-function hourSelect(id, hours, value) {
-  return el('select', { id },
-    ...hours.map((h) => el('option', { value: h, selected: h === value }, formatHourOption(h))));
 }
 
 function formatHourOption(h) {
@@ -624,86 +625,125 @@ function formatHourOption(h) {
   return h >= 24 ? `${label} (after midnight)` : label;
 }
 
-let draft = [];
-
-function readDraft() {
-  return draft.map((_, i) => {
-    const pick = $(`gd-city-${i}`).value;
-    const [kind, val] = [pick.slice(0, 1), pick.slice(2)];
-    const city = kind === 'c' ? CITIES[Number(val)] : { city: val.split('/').pop().replace(/_/g, ' '), tz: val };
-    return {
-      name: $(`gd-name-${i}`).value,
-      city: city.city,
-      tz: city.tz,
-      wake: Number($(`gd-wake-${i}`).value),
-      bed: Number($(`gd-bed-${i}`).value),
-      work: $(`gd-work-${i}`).checked,
-    };
-  });
+function hourSelect(id, hours, value, onchange) {
+  return el('select', { id, onchange },
+    ...hours.map((h) => el('option', { value: h, selected: h === value }, formatHourOption(h))));
 }
 
-function renderDraft() {
-  $('gd-rows').replaceChildren(
-    ...draft.map((p, i) => el('fieldset', { class: 'gd-row' },
-      el('legend', { text: `Friend ${i + 1}` }),
-      el('div', { class: 'field' }, el('label', { for: `gd-name-${i}`, text: 'Name' }),
-        el('input', { id: `gd-name-${i}`, type: 'text', maxlength: '24', value: p.name, required: true })),
-      el('div', { class: 'field grow' }, el('label', { for: `gd-city-${i}`, text: 'City' }), citySelect(`gd-city-${i}`, p)),
-      el('div', { class: 'field' }, el('label', { for: `gd-wake-${i}`, text: 'Wakes' }), hourSelect(`gd-wake-${i}`, HOURS_WAKE, p.wake)),
-      el('div', { class: 'field' }, el('label', { for: `gd-bed-${i}`, text: 'Bed' }), hourSelect(`gd-bed-${i}`, HOURS_BED, p.bed)),
-      el('label', { class: 'check', for: `gd-work-${i}` },
-        el('input', { id: `gd-work-${i}`, type: 'checkbox', checked: p.work }), 'Works 9–17 on weekdays'),
+let nameTimer = null;
+
+function rosterChanged() {
+  recompute();
+  renderAll();
+  schedulePresetSave();
+}
+
+function renderRoster() {
+  const rows = state.roster.map((r, i) => {
+    const id = (k) => `r-${k}-${r.id}`;
+    return el('fieldset', { class: 'r-row' },
+      el('legend', { class: 'visually-hidden', text: `Person ${i + 1}` }),
+      el('div', { class: 'field' },
+        el('label', { for: id('name'), text: 'Name' }),
+        el('input', {
+          id: id('name'),
+          type: 'text',
+          maxlength: '24',
+          value: r.name,
+          placeholder: i === 0 ? 'You' : `Friend ${i + 1}`,
+          autocomplete: 'off',
+          oninput: (e) => {
+            r.name = e.target.value;
+            clearTimeout(nameTimer);
+            nameTimer = setTimeout(rosterChanged, 250);
+          },
+        })),
+      el('div', { class: 'field grow' },
+        el('label', { for: id('city'), text: 'City right now' }),
+        citySelect(id('city'), r, (e) => {
+          const v = e.target.value;
+          if (!v) {
+            r.tz = null;
+            r.city = '';
+          } else if (v.startsWith('c:')) {
+            Object.assign(r, { city: CITIES[Number(v.slice(2))].city, tz: CITIES[Number(v.slice(2))].tz });
+          } else {
+            r.tz = v.slice(2);
+            r.city = r.tz.split('/').pop().replace(/_/g, ' ');
+          }
+          rosterChanged();
+        })),
+      el('div', { class: 'field' },
+        el('label', { for: id('wake'), text: 'Wakes' }),
+        hourSelect(id('wake'), HOURS_WAKE, r.wake, (e) => {
+          r.wake = Number(e.target.value);
+          rosterChanged();
+        })),
+      el('div', { class: 'field' },
+        el('label', { for: id('bed'), text: 'Bed' }),
+        hourSelect(id('bed'), HOURS_BED, r.bed, (e) => {
+          r.bed = Number(e.target.value);
+          rosterChanged();
+        })),
+      el('label', { class: 'check', for: id('work') },
+        el('input', {
+          id: id('work'),
+          type: 'checkbox',
+          checked: r.work,
+          onchange: (e) => {
+            r.work = e.target.checked;
+            rosterChanged();
+          },
+        }),
+        'Works 9–17 weekdays'),
       el('button', {
         type: 'button',
         class: 'btn ghost small',
-        disabled: draft.length <= MIN_PEOPLE,
-        'aria-label': `Remove friend ${i + 1}`,
+        disabled: state.roster.length <= MIN_PEOPLE,
+        'aria-label': `Remove person ${i + 1}`,
         onclick: () => {
-          draft = readDraft();
-          draft.splice(i, 1);
-          renderDraft();
+          state.roster.splice(i, 1);
+          renderRoster();
+          rosterChanged();
         },
-      }, 'Remove'))),
-  );
-  $('gd-add').disabled = draft.length >= MAX_PEOPLE;
+      }, 'Remove'));
+  });
+  $('roster-rows').replaceChildren(...rows);
+  $('roster-add').disabled = state.roster.length >= MAX_PEOPLE;
+  $('roster-count').textContent = `${state.roster.length} of ${MAX_PEOPLE}`;
 }
 
-function openGroupDialog() {
-  draft = state.people.map((p) => ({ ...p }));
-  renderDraft();
-  $('group-dialog').showModal();
+$('roster-add').addEventListener('click', () => {
+  if (state.roster.length >= MAX_PEOPLE) return;
+  const row = makeRow();
+  state.roster.push(row);
+  renderRoster();
+  renderMode();
+  $(`r-name-${row.id}`).focus();
+});
+
+function renderMode() {
+  const preset = state.mode === 'preset';
+  $('mode-chip').hidden = !preset;
+  $('adhoc-note').hidden = preset;
+  $('preset-note').hidden = !preset;
+  $('save-preset').disabled = !ready();
+  $('save-preset').title = ready() ? '' : 'Add at least two people with a city first';
 }
-$('edit-group').addEventListener('click', openGroupDialog);
 
-$('gd-add').addEventListener('click', () => {
-  draft = readDraft();
-  if (draft.length >= MAX_PEOPLE) return;
-  const guess = CITIES.findIndex((c) => c.tz === viewerTz);
-  const base = guess >= 0 ? CITIES[guess] : { city: viewerTz.split('/').pop().replace(/_/g, ' '), tz: viewerTz };
-  draft.push({ name: '', city: base.city, tz: base.tz, wake: 8, bed: 23, work: true });
-  renderDraft();
-  $(`gd-name-${draft.length - 1}`).focus();
-});
-
-$('group-dialog').addEventListener('close', () => {
-  if ($('group-dialog').returnValue !== 'save') return;
-  const people = cleanGroup(readDraft());
-  if (!people) return;
-  state.people = people;
-  recompute();
-  renderAll();
-  persist();
-  toast(state.isExample
-    ? 'Example edits are not saved. Create your group to keep them.'
-    : 'Friends saved and encrypted. Copy the group link to share them.');
-});
-
-// ---------- Boot ----------
+// ---------- Rendering ----------
 
 function renderAll() {
   renderClockToggle();
   renderHero();
   renderInvite();
+  renderMode();
+  const ok = ready();
+  $('plan').hidden = !ok;
+  if (!ok) {
+    $('dst-notice').hidden = true;
+    return;
+  }
   renderDst();
   renderNow();
   renderDays();
@@ -712,59 +752,116 @@ function renderAll() {
   renderCall();
 }
 
-// ---------- Lock screen ----------
-
-let pendingToken = null;
-let pendingFromLink = false;
-let legacyPeople = null;
-let lockoutTimer = null;
-
-function showApp(on) {
-  $('app').hidden = !on;
-  $('lock').hidden = on;
-  $('top-actions').hidden = !on;
+function syncFields() {
+  $('f-title').value = state.title;
+  $('f-link').value = state.link;
+  $('f-duration').value = String(state.duration);
+  if (!$('f-duration').value) $('f-duration').value = '60';
 }
 
-const LOCK_COPY = {
-  welcome: [
-    'Your group, for your eyes only',
-    'Names and cities are encrypted on your device with a passphrase only your group knows. ' +
-      'Nothing is stored on a server, and a link is useless without the passphrase. ' +
-      'Got a link from a friend? Open it and you will be asked for the passphrase.',
-  ],
-  unlock: [
-    'Enter the group passphrase',
-    'This group is encrypted. Ask the friend who set it up for the passphrase.',
-  ],
-  create: [
-    'Create your group',
-    'Everyone in the group uses this one passphrase to open links. ' +
-      'Send it once, separately from the links: say it on a call or use a different app.',
-  ],
-};
+function showApp() {
+  $('unlock').hidden = true;
+  $('app').hidden = false;
+}
 
-function showLock(mode, { error = '' } = {}) {
-  showApp(false);
-  $('lock-welcome').hidden = mode !== 'welcome';
-  $('unlock-form').hidden = mode !== 'unlock';
-  $('create-form').hidden = mode !== 'create';
-  $('lock-title').textContent = LOCK_COPY[mode][0];
-  $('lock-text').textContent = LOCK_COPY[mode][1];
-  $('lock-error').textContent = mode === 'welcome' ? error : '';
-  $('lock-error').hidden = !(mode === 'welcome' && error);
-  $('forget-device').hidden = !loadBlob();
-  if (mode === 'unlock') {
-    $('unlock-pass').value = '';
-    $('unlock-error').textContent = error;
-    $('unlock-pass').focus();
-    updateLockout();
+// ---------- Ad-hoc mode ----------
+
+function startAdhoc(invite) {
+  state.mode = 'adhoc';
+  vault.key = null;
+  vault.salt = null;
+  const mine = CITIES.find((c) => c.tz === viewerTz)
+    ?? { city: viewerTz.split('/').pop().replace(/_/g, ' '), tz: viewerTz };
+  state.roster = [makeRow({ city: mine.city, tz: mine.tz }), makeRow()];
+  if (invite) {
+    state.invite = { t: invite.t };
+    state.selected = invite.t;
+    state.title = invite.n ?? 'Catch-up call';
+    state.link = invite.l ?? '';
+    state.duration = invite.d ?? 60;
   }
-  if (mode === 'create') {
-    $('create-pass').value = generatePassphrase();
-    $('create-error').textContent = '';
-    $('create-saved').checked = false;
-    $('create-pass').focus();
+  showApp();
+  syncFields();
+  renderRoster();
+  recompute();
+  renderAll();
+}
+
+// ---------- Private preset: create ----------
+
+$('save-preset').addEventListener('click', () => {
+  if (!ready()) return toast('Add at least two people with a city first.');
+  $('pd-pass').value = generatePassphrase();
+  $('pd-error').textContent = '';
+  $('pd-saved').checked = false;
+  $('pd-remember').checked = false;
+  $('preset-dialog').showModal();
+  $('pd-pass').select();
+});
+
+$('pd-regen').addEventListener('click', () => {
+  $('pd-pass').value = generatePassphrase();
+  $('pd-error').textContent = '';
+});
+$('pd-copy').addEventListener('click', () => copy($('pd-pass').value, 'Password copied. Save it in your password manager.'));
+$('pd-pass').addEventListener('input', () => { $('pd-error').textContent = ''; });
+$('pd-cancel').addEventListener('click', () => $('preset-dialog').close());
+
+$('preset-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pass = $('pd-pass').value;
+  const problem = passphraseProblem(pass);
+  if (problem) {
+    $('pd-error').textContent = problem.replace('passphrase', 'password');
+    return;
   }
+  if (!$('pd-saved').checked) {
+    $('pd-error').textContent = 'Tick the box once you have saved the password. It cannot be recovered.';
+    return;
+  }
+  const btn = $('pd-btn');
+  btn.disabled = true;
+  btn.textContent = 'Encrypting…';
+  const salt = newSalt();
+  const key = await deriveKey(pass, salt);
+  btn.disabled = false;
+  btn.textContent = 'Create private link';
+  $('pd-pass').value = '';
+  vault.key = key;
+  vault.salt = salt;
+  if ($('pd-remember').checked) await rememberKey(salt, key);
+  state.mode = 'preset';
+  presetSaves = 0;
+  await savePreset();
+  $('preset-dialog').close();
+  renderMode();
+  toast('Private link created. Bookmark this page or copy the link.');
+});
+
+$('copy-preset').addEventListener('click', async () => {
+  await savePreset(); // make sure the link has the latest edits
+  copy(location.href, 'Private link copied. Send the password separately.');
+});
+
+$('lock-btn').addEventListener('click', async () => {
+  await savePreset();
+  if (vault.salt) await forgetKey(vault.salt);
+  location.reload(); // the link stays in the address bar, so the password is asked again
+});
+
+// ---------- Private preset: unlock ----------
+
+let pendingToken = null;
+let lockoutTimer = null;
+
+function showUnlock(token) {
+  pendingToken = token;
+  $('app').hidden = true;
+  $('unlock').hidden = false;
+  $('unlock-pass').value = '';
+  $('unlock-error').textContent = '';
+  $('unlock-pass').focus();
+  updateLockout();
 }
 
 function updateLockout() {
@@ -779,34 +876,23 @@ function updateLockout() {
   lockoutTimer = setInterval(tick, 1000);
 }
 
-function syncFields() {
-  $('f-title').value = state.title;
-  $('f-link').value = state.link;
-  $('f-duration').value = String(state.duration);
-  if (!$('f-duration').value) $('f-duration').value = '60';
-}
-
-async function unlock(key, salt, payload, remember, fromLink) {
+function enterPreset(key, salt, payload) {
   vault.key = key;
   vault.salt = salt;
-  vault.remember = remember;
-  if (remember) await rememberKey(salt, key);
-  else await wipeDevice();
-  state.people = payload.people;
-  state.isExample = false;
+  state.mode = 'preset';
+  state.roster = payload.people.map(makeRow);
   state.title = payload.n ?? 'Catch-up call';
   state.link = payload.l ?? '';
   state.duration = payload.d ?? 60;
-  if (fromLink && payload.t != null) {
-    state.selected = payload.t;
-    state.invite = { t: payload.t };
-  }
+  presetSaves = 1;
+  showApp();
   syncFields();
+  renderRoster();
   recompute();
-  showApp(true);
   renderAll();
-  await persist();
 }
+
+$('unlock-pass').addEventListener('input', () => { $('unlock-error').textContent = ''; });
 
 $('unlock-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -816,9 +902,9 @@ $('unlock-form').addEventListener('submit', async (e) => {
   const btn = $('unlock-btn');
   btn.disabled = true;
   btn.textContent = 'Unlocking…';
-  let payload = null;
-  let key = null;
   const { salt } = peek(pendingToken);
+  let key = null;
+  let payload = null;
   try {
     key = await deriveKey(pass, salt);
     payload = fromPayload(await open(key, pendingToken));
@@ -829,108 +915,54 @@ $('unlock-form').addEventListener('submit', async (e) => {
   btn.disabled = false;
   if (!payload) {
     recordFailure();
-    $('unlock-error').textContent = 'That passphrase does not open this group. Check it with the friend who set it up.';
+    $('unlock-error').textContent = 'That password does not open this group.';
     $('unlock-pass').select();
     updateLockout();
     return;
   }
   clearFailures();
   $('unlock-pass').value = '';
-  await unlock(key, salt, payload, $('unlock-remember').checked, pendingFromLink);
+  if ($('unlock-remember').checked) await rememberKey(salt, key);
+  enterPreset(key, salt, payload);
 });
 
-function starterGroup() {
-  const mine = CITIES.find((c) => c.tz === viewerTz)
-    ?? { city: viewerTz.split('/').pop().replace(/_/g, ' '), tz: viewerTz };
-  return cleanGroup([
-    { name: 'Me', city: mine.city, tz: mine.tz, wake: 8, bed: 23, work: true },
-    { name: '', city: 'London', tz: 'Europe/London', wake: 8, bed: 23, work: true },
-  ]);
-}
-
-$('create-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const pass = $('create-pass').value;
-  const problem = passphraseProblem(pass);
-  if (problem) {
-    $('create-error').textContent = problem;
-    return;
-  }
-  if (!$('create-saved').checked) {
-    $('create-error').textContent = 'Tick the box once you have saved the passphrase. It cannot be recovered.';
-    return;
-  }
-  const btn = $('create-btn');
-  btn.disabled = true;
-  btn.textContent = 'Encrypting…';
-  const salt = newSalt();
-  const key = await deriveKey(pass, salt);
-  btn.disabled = false;
-  btn.textContent = 'Create group';
-  $('create-pass').value = '';
-  const people = cleanGroup(legacyPeople) ?? starterGroup();
-  legacyPeople = null;
-  await unlock(key, salt, { people }, $('create-remember').checked, false);
-  openGroupDialog();
+$('unlock-skip').addEventListener('click', () => {
+  history.replaceState(null, '', base());
+  startAdhoc(null);
 });
 
-$('create-regen').addEventListener('click', () => {
-  $('create-pass').value = generatePassphrase();
-  $('create-error').textContent = '';
-});
-$('create-copy').addEventListener('click', () => copy($('create-pass').value, 'Passphrase copied. Save it in your password manager.'));
-$('create-pass').addEventListener('input', () => { $('create-error').textContent = ''; });
-$('unlock-pass').addEventListener('input', () => { $('unlock-error').textContent = ''; });
-$('create-back').addEventListener('click', () => showLock('welcome'));
-$('start-create').addEventListener('click', () => showLock('create'));
-$('start-example').addEventListener('click', () => {
-  vault.key = null;
-  state.people = EXAMPLE_GROUP.map((p) => ({ ...p }));
-  state.isExample = true;
-  recompute();
-  showApp(true);
-  renderAll();
-});
-$('create-own').addEventListener('click', () => showLock('create'));
-
-$('lock-btn').addEventListener('click', async () => {
-  await forgetKey();
-  location.reload();
-});
-
-$('forget-device').addEventListener('click', async () => {
-  if (!confirm('Remove the saved group and its key from this device? You will need a link and the passphrase to open it again.')) return;
-  await wipeDevice();
-  location.reload();
-});
+// ---------- Boot ----------
 
 async function start() {
-  legacyPeople = takeLegacyGroup(); // wipes any unencrypted data left by an older version
-  const hashToken = new URLSearchParams(location.hash.slice(1)).get('e');
-  // Never leave group data in the address bar or history entry.
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-  const token = hashToken ?? loadBlob();
-  if (!token) return showLock('welcome');
-  const info = peek(token);
-  if (!info) return showLock('welcome', { error: 'That link is damaged or incomplete. Ask your friend to send it again.' });
-  pendingToken = token;
-  pendingFromLink = Boolean(hashToken);
-  const key = await rememberedKey(info.salt);
-  if (key) {
-    try {
-      const payload = fromPayload(await open(key, token));
-      if (payload) return unlock(key, info.salt, payload, true, pendingFromLink);
-    } catch {
-      /* stored key does not match: fall through to the passphrase prompt */
+  await cleanupLegacy();
+  const params = new URLSearchParams(location.hash.slice(1));
+  const token = params.get('p');
+  if (token) {
+    const info = peek(token);
+    if (info) {
+      const key = await rememberedKey(info.salt);
+      if (key) {
+        try {
+          const payload = fromPayload(await open(key, token));
+          if (payload) return enterPreset(key, info.salt, payload);
+        } catch {
+          /* stored key does not fit this link: ask for the password */
+        }
+      }
+      return showUnlock(token);
     }
+    history.replaceState(null, '', base());
+    startAdhoc(null);
+    toast('That private link is damaged or incomplete. Ask for it again.');
+    return;
   }
-  showLock('unlock');
+  startAdhoc(readTimeHash(params));
 }
 
 start();
 
 setInterval(() => {
-  if ($('app').hidden) return;
+  if ($('app').hidden || !ready()) return;
   if (Date.now() >= dayStarts[1]) {
     recompute();
     renderAll();

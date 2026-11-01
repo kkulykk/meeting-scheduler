@@ -65,6 +65,32 @@ export function fromPayload(obj) {
   return out;
 }
 
+// ---------- Public time links (no names, no group) ----------
+
+const stamp = (ms) => new Date(ms).toISOString().slice(0, 16) + 'Z';
+
+/** "#t=2026-11-08T17:00Z&d=60&n=Catch-up+call&l=https://…" */
+export function buildTimeHash({ t, d, n, l }) {
+  const q = new URLSearchParams();
+  q.set('t', stamp(t));
+  if (d) q.set('d', String(d));
+  if (n) q.set('n', n);
+  if (l) q.set('l', l);
+  return '#' + q.toString();
+}
+
+export function readTimeHash(params) {
+  const t = Date.parse(params.get('t') ?? '');
+  if (!Number.isFinite(t)) return null;
+  const out = { t };
+  if (params.get('d')) out.d = clampInt(params.get('d'), 15, 240, 60);
+  const n = (params.get('n') ?? '').trim();
+  if (n) out.n = n.slice(0, 80);
+  const l = params.get('l') ?? '';
+  if (/^https?:\/\//i.test(l)) out.l = l.slice(0, 500);
+  return out;
+}
+
 // ---------- Non-sensitive preferences ----------
 
 const PREFS_KEY = 'common-hour:prefs';

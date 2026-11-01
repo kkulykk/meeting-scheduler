@@ -15,73 +15,40 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <a class="skip" href="#planner">Skip to the timeline</a>
+  <a class="skip" href="#roster">Skip to the plan</a>
 
   <header class="top">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <span class="brand-name">Common Hour</span>
+      <span class="chip mode-chip" id="mode-chip" hidden>Private preset</span>
     </div>
-    <div class="top-actions" id="top-actions" hidden>
+    <div class="top-actions">
       <button type="button" class="btn ghost" id="clock-toggle" aria-pressed="false">12-hour clock</button>
-      <button type="button" class="btn" id="share-group">Copy group link</button>
-      <button type="button" class="btn primary" id="create-own" hidden>Create your group</button>
-      <button type="button" class="btn" id="lock-btn" title="Forget the key on this device until the passphrase is entered again">Lock</button>
     </div>
   </header>
 
-  <section class="lock" id="lock" aria-labelledby="lock-title">
+  <section class="lock" id="unlock" hidden aria-labelledby="unlock-title">
     <div class="lock-card">
       <div class="lock-art" aria-hidden="true"><span></span></div>
-      <h1 id="lock-title">Your group, for your eyes only</h1>
-      <p class="lock-text" id="lock-text">Loading…</p>
-      <p class="form-error" id="lock-error" role="alert" hidden></p>
-
-      <div class="lock-actions" id="lock-welcome" hidden>
-        <button type="button" class="btn primary" id="start-create">Create your group</button>
-        <button type="button" class="btn" id="start-example">Try with example friends</button>
-      </div>
-
-      <form id="unlock-form" class="lock-form" hidden novalidate>
+      <h1 id="unlock-title">This is a private group</h1>
+      <p class="lock-text">Enter the password to open it. Without it, this link shows nothing.</p>
+      <form id="unlock-form" class="lock-form" novalidate>
         <div class="field">
-          <label for="unlock-pass">Group passphrase</label>
+          <label for="unlock-pass">Password</label>
           <input id="unlock-pass" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
         </div>
         <label class="check" for="unlock-remember">
-          <input id="unlock-remember" type="checkbox" checked>
-          Remember on this device (leave unticked on shared computers)
+          <input id="unlock-remember" type="checkbox">
+          Remember on this device (only on your own phone or computer)
         </label>
         <p class="form-error" id="unlock-error" role="alert"></p>
         <p class="form-wait" id="unlock-wait" aria-live="polite"></p>
-        <button type="submit" class="btn primary" id="unlock-btn">Unlock</button>
-      </form>
-
-      <form id="create-form" class="lock-form" hidden novalidate>
-        <div class="field">
-          <label for="create-pass">Group passphrase</label>
-          <div class="pass-row">
-            <input id="create-pass" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" required>
-            <button type="button" class="btn small" id="create-copy">Copy</button>
-            <button type="button" class="btn small ghost" id="create-regen">New one</button>
-          </div>
-          <p class="field-hint">We generated a strong one for you. You can type your own instead (at least 14 characters).</p>
-        </div>
-        <label class="check" for="create-saved">
-          <input id="create-saved" type="checkbox">
-          I saved this passphrase. If it is lost, the group cannot be recovered.
-        </label>
-        <label class="check" for="create-remember">
-          <input id="create-remember" type="checkbox" checked>
-          Remember on this device
-        </label>
-        <p class="form-error" id="create-error" role="alert"></p>
         <div class="lock-actions">
-          <button type="submit" class="btn primary" id="create-btn">Create group</button>
-          <button type="button" class="btn ghost" id="create-back">Back</button>
+          <button type="submit" class="btn primary" id="unlock-btn">Unlock</button>
+          <button type="button" class="btn ghost" id="unlock-skip">Start an empty plan instead</button>
         </div>
       </form>
-
-      <button type="button" class="linkish" id="forget-device" hidden>Remove the saved group from this device</button>
     </div>
   </section>
 
@@ -103,17 +70,39 @@
         <a class="btn primary" id="invite-ics" download="call.ics" href="#">Add to my calendar</a>
         <a class="btn" id="invite-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
         <a class="btn" id="invite-join" target="_blank" rel="noopener" href="#" hidden>Join call</a>
-        <button type="button" class="btn ghost" id="invite-close">Plan another time</button>
+        <button type="button" class="btn ghost" id="invite-close">Dismiss</button>
+      </div>
+    </section>
+
+    <section class="roster" id="roster" aria-labelledby="roster-title">
+      <div class="section-head">
+        <h2 id="roster-title">Who's on the call</h2>
+        <span class="roster-count" id="roster-count"></span>
+      </div>
+      <div class="roster-rows" id="roster-rows"></div>
+      <div class="roster-foot">
+        <button type="button" class="btn" id="roster-add">Add a person</button>
+        <span class="spacer"></span>
+        <div class="mode-note" id="adhoc-note">
+          <p>Nothing here is saved. Refresh the page and it's gone.</p>
+          <button type="button" class="btn primary" id="save-preset">Save as private group…</button>
+        </div>
+        <div class="mode-note preset" id="preset-note" hidden>
+          <p id="preset-text">Saved inside its private link. Anyone who opens it needs the password.</p>
+          <div class="lock-actions">
+            <button type="button" class="btn primary" id="copy-preset">Copy private link</button>
+            <button type="button" class="btn" id="lock-btn">Lock</button>
+          </div>
+        </div>
       </div>
     </section>
 
     <p class="notice" id="dst-notice" hidden role="note"></p>
 
+    <div id="plan" class="plan">
     <section class="now" aria-labelledby="now-title">
       <div class="section-head">
         <h2 id="now-title">Right now</h2>
-        <span class="chip" id="example-chip" hidden>Example friends</span>
-        <button type="button" class="btn" id="edit-group">Edit friends</button>
       </div>
       <ul class="now-list" id="now-list"></ul>
     </section>
@@ -176,7 +165,7 @@
         <div class="actions">
           <button type="button" class="btn primary" id="a-copy">Copy message</button>
           <button type="button" class="btn" id="a-share" hidden>Share…</button>
-          <button type="button" class="btn" id="a-link">Copy link</button>
+          <button type="button" class="btn" id="a-link" title="Shows the time in each friend's own zone. Contains no names.">Copy time link</button>
           <a class="btn" id="a-ics" download="call.ics" href="#">Download .ics</a>
           <a class="btn" id="a-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
           <a class="btn" id="a-outlook" target="_blank" rel="noopener" href="#">Outlook</a>
@@ -189,23 +178,39 @@
         </details>
       </section>
     </div>
+    </div>
   </main>
 
   <footer class="foot">
-    <p>End-to-end encrypted with your group passphrase (AES-256-GCM). No accounts, no server, no calendars.</p>
+    <p>Nothing about your friends is stored or sent anywhere. Private groups are encrypted (AES-256-GCM) inside their own link.</p>
   </footer>
   </div>
 
-  <dialog id="group-dialog" aria-labelledby="gd-title">
-    <form method="dialog" id="group-form">
-      <h2 id="gd-title">Your friends</h2>
-      <p class="hint">2 to 5 people. Wake and bed times keep the suggestions humane.</p>
-      <div id="gd-rows" class="gd-rows"></div>
-      <div class="gd-foot">
-        <button type="button" class="btn" id="gd-add">Add friend</button>
-        <span class="spacer"></span>
-        <button type="submit" class="btn ghost" value="cancel" formnovalidate>Cancel</button>
-        <button type="submit" class="btn primary" value="save">Save friends</button>
+  <dialog id="preset-dialog" aria-labelledby="pd-title">
+    <form id="preset-form" class="lock-form dialog-body" novalidate>
+      <h2 id="pd-title">Save as a private group</h2>
+      <p class="hint">Your group is encrypted into a private link. Bookmark it. Opening it asks for this password, and nothing is stored anywhere else.</p>
+      <div class="field">
+        <label for="pd-pass">Password</label>
+        <div class="pass-row">
+          <input id="pd-pass" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" required>
+          <button type="button" class="btn small" id="pd-copy">Copy</button>
+          <button type="button" class="btn small ghost" id="pd-regen">New one</button>
+        </div>
+        <p class="field-hint">We generated a strong one. You can type your own instead (at least 14 characters).</p>
+      </div>
+      <label class="check" for="pd-saved">
+        <input id="pd-saved" type="checkbox">
+        I saved this password. If it is lost, the group cannot be opened.
+      </label>
+      <label class="check" for="pd-remember">
+        <input id="pd-remember" type="checkbox">
+        Remember on this device
+      </label>
+      <p class="form-error" id="pd-error" role="alert"></p>
+      <div class="lock-actions">
+        <button type="submit" class="btn primary" id="pd-btn">Create private link</button>
+        <button type="button" class="btn ghost" id="pd-cancel">Cancel</button>
       </div>
     </form>
   </dialog>

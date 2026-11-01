@@ -1,43 +1,27 @@
-// On-device storage. The group is saved only as ciphertext. If the person chooses
-// "remember this device", the AES key is kept in IndexedDB as a non-extractable
-// CryptoKey: scripts can use it, but nobody can read the key bytes out.
+// Device storage. By design the app never stores people: an ad-hoc plan disappears on
+// refresh, and a preset lives only inside its own encrypted link. The one thing that can
+// be kept, if the person ticks "Remember", is a preset's AES key, stored in IndexedDB as a
+// non-extractable CryptoKey: scripts can use it, nobody can read the key bytes out.
 import { b64u } from './crypto.js';
 
-const BLOB_KEY = 'common-hour:vault';
 const ATTEMPTS_KEY = 'common-hour:attempts';
-const LEGACY_KEYS = ['common-hour:v1']; // older builds stored the group unencrypted
 const DB = 'common-hour';
 const STORE = 'keys';
 
-export function loadBlob() {
-  try {
-    return localStorage.getItem(BLOB_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function saveBlob(token) {
-  try {
-    localStorage.setItem(BLOB_KEY, token);
-  } catch {
-    /* storage unavailable: the group still works for this visit */
-  }
-}
-
-/** Removes any unencrypted data left by older versions and returns its group, if any. */
-export function takeLegacyGroup() {
-  let people = null;
-  for (const k of LEGACY_KEYS) {
+/** Deletes anything earlier versions stored (some of it unencrypted). */
+export async function cleanupLegacy() {
+  for (const k of ['common-hour:v1', 'common-hour:vault']) {
     try {
-      const data = JSON.parse(localStorage.getItem(k) ?? 'null');
-      if (data?.people && !people) people = data.people;
       localStorage.removeItem(k);
     } catch {
       /* ignore */
     }
   }
-  return people;
+  try {
+    await tx('readwrite', (s) => s.delete('group'));
+  } catch {
+    /* ignore */
+  }
 }
 
 function db() {
@@ -65,10 +49,11 @@ async function tx(mode, fn) {
   });
 }
 
+const slot = (salt) => `preset:${b64u(salt)}`;
+
 export async function rememberedKey(salt) {
   try {
-    const rec = await tx('readonly', (s) => s.get('group'));
-    return rec && rec.salt === b64u(salt) ? rec.key : null;
+    return (await tx('readonly', (s) => s.get(slot(salt)))) ?? null;
   } catch {
     return null;
   }
@@ -76,33 +61,22 @@ export async function rememberedKey(salt) {
 
 export async function rememberKey(salt, key) {
   try {
-    await tx('readwrite', (s) => s.put({ salt: b64u(salt), key }, 'group'));
+    await tx('readwrite', (s) => s.put(key, slot(salt)));
   } catch {
-    /* private mode: the person will be asked for the passphrase next time */
+    /* private mode: the password will be asked again next time */
   }
 }
 
-export async function forgetKey() {
+export async function forgetKey(salt) {
   try {
-    await tx('readwrite', (s) => s.delete('group'));
+    await tx('readwrite', (s) => s.delete(slot(salt)));
   } catch {
     /* nothing stored */
   }
 }
 
-/** Removes everything this app stored on the device. */
-export async function wipeDevice() {
-  await forgetKey();
-  try {
-    localStorage.removeItem(BLOB_KEY);
-    localStorage.removeItem(ATTEMPTS_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 // ---------- Slowing down guessing on this page ----------
-// Real protection against guessing is the slow key derivation plus a strong passphrase.
+// Real protection against guessing is the slow key derivation plus a strong password.
 // This delay also stops someone from simply typing guesses on a shared computer.
 
 function readAttempts() {
