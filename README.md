@@ -1,4 +1,4 @@
-# Common Hour
+# Meeting Scheduler
 
 Find a call time that works for 2 to 5 friends spread across time zones
 (say New Orleans, Oxford, Warsaw, Vienna and Kyiv), then send the invite.

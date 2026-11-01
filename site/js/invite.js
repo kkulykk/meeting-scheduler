@@ -41,11 +41,11 @@ export function foldLine(line) {
 
 export function buildIcs({ title, start, durationMin, description, link, now = Date.now(), uid }) {
   const end = start + durationMin * MIN;
-  const id = uid ?? `${start}-${Math.random().toString(36).slice(2, 10)}@common-hour`;
+  const id = uid ?? `${start}-${Math.random().toString(36).slice(2, 10)}@meeting-scheduler`;
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Common Hour//EN',
+    'PRODID:-//Meeting Scheduler//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

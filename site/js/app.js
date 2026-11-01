@@ -15,7 +15,7 @@ import {
 // Refuse to run inside someone else's frame (clickjacking).
 if (window.top !== window.self) {
   document.documentElement.replaceChildren();
-  throw new Error('Common Hour cannot be embedded.');
+  throw new Error('Meeting Scheduler cannot be embedded.');
 }
 import { buildMessage, buildIcs, googleCalendarUrl, outlookUrl, mailtoUrl } from './invite.js';
 

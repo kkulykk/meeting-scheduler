@@ -1,5 +1,5 @@
 {
-  "name": "common-hour",
+  "name": "meeting-scheduler",
   "version": "0.1.0",
   "private": true,
   "description": "Find a call time that works for 2 to 5 friends across time zones.",
