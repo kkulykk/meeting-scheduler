@@ -355,7 +355,25 @@ function renderRibbon() {
     beam.style.gridRow = '1 / -1';
     beam.style.gridColumn = `${col + 2} / span ${span}`;
     nodes.push(beam);
+    ribbonSel = { col, span };
+
+    // Exact times, since the grid only has a tick every 3 hours.
+    const endMs = state.selected + state.duration * MIN;
+    place(el('div', { class: 'beam-label', 'aria-hidden': 'true' },
+      `${formatTime(viewerTz, state.selected, state.h12)}–${formatTime(viewerTz, endMs, state.h12)}`), 1, col + 2, span);
+    people.forEach((person, r) => {
+      place(el('div', { class: 'beam-time', 'aria-hidden': 'true' },
+        formatTime(person.tz, state.selected, state.h12)), r + 2, col + 2, span);
+    });
+  } else {
+    ribbonSel = null;
   }
+
+  // Shows the time under the pointer, in the viewer's zone.
+  hoverLabel = el('div', { class: 'hover-time', 'aria-hidden': 'true', hidden: true });
+  hoverLabel.style.gridRow = '1';
+  nodes.push(hoverLabel);
+  ribbonStart = start;
 
   // A thin line at the current moment, on today's view.
   if (now >= start && now < end) {
@@ -386,6 +404,24 @@ function scrollRibbonToSelection() {
     wrap.scrollLeft = Math.max(0, beam.offsetLeft - wrap.clientWidth / 2);
   });
 }
+
+let hoverLabel = null;
+let ribbonSel = null;
+let ribbonStart = 0;
+
+$('ribbon').addEventListener('mouseover', (e) => {
+  const target = e.target.closest('[data-ms]');
+  if (!target || !hoverLabel) return;
+  const ms = Number(target.dataset.ms);
+  const col = Math.round((ms - ribbonStart) / (SLOT_MIN * MIN));
+  const onBeam = ribbonSel && col >= ribbonSel.col && col < ribbonSel.col + ribbonSel.span;
+  hoverLabel.hidden = Boolean(onBeam);
+  hoverLabel.style.gridColumn = `${col + 2} / span 1`;
+  hoverLabel.textContent = formatTime(viewerTz, ms, state.h12);
+});
+$('ribbon').addEventListener('mouseleave', () => {
+  if (hoverLabel) hoverLabel.hidden = true;
+});
 
 $('ribbon').addEventListener('click', (e) => {
   const target = e.target.closest('[data-ms]');
