@@ -1,9 +1,8 @@
-// Group and invite state, stored in the URL hash (shareable) and localStorage (sticky).
+// Group data model and validation. Storage and links go through crypto.js and vault.js.
 import { normalizeZone } from './time.js';
 
 export const MIN_PEOPLE = 2;
 export const MAX_PEOPLE = 5;
-const STORAGE_KEY = 'common-hour:v1';
 
 export const EXAMPLE_GROUP = [
   { name: 'Jake', city: 'New Orleans', tz: 'America/Chicago', wake: 7, bed: 23, work: true },
@@ -40,75 +39,48 @@ export function cleanGroup(list) {
   return people.length >= MIN_PEOPLE ? people : null;
 }
 
-// ---------- base64url (UTF-8 safe, so Cyrillic names survive) ----------
+// ---------- Payload carried (encrypted) in links and on the device ----------
 
-export function toB64Url(str) {
-  let bin = '';
-  for (const b of new TextEncoder().encode(str)) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-export function fromB64Url(s) {
-  let b = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (b.length % 4) b += '=';
-  return new TextDecoder().decode(Uint8Array.from(atob(b), (c) => c.charCodeAt(0)));
-}
-
-export function encodeGroup(people) {
-  return toB64Url(JSON.stringify(people.map((p) => [p.name, p.city, p.tz, p.wake, p.bed, p.work ? 1 : 0])));
-}
-
-export function decodeGroup(code) {
-  try {
-    const rows = JSON.parse(fromB64Url(code));
-    return cleanGroup(rows.map(([name, city, tz, wake, bed, work]) => ({ name, city, tz, wake, bed, work })));
-  } catch {
-    return null;
-  }
-}
-
-/** Short UTC stamp for links: 2026-11-08T17:00Z */
-const stamp = (ms) => new Date(ms).toISOString().slice(0, 16) + 'Z';
-
-export function readHash(hash) {
-  const q = new URLSearchParams(String(hash).replace(/^#/, ''));
-  const out = {};
-  if (q.get('g')) out.people = decodeGroup(q.get('g'));
-  const t = Date.parse(q.get('t') ?? '');
-  if (Number.isFinite(t)) out.t = t;
-  if (q.get('d')) out.d = clampInt(q.get('d'), 15, 240, 60);
-  if (q.get('n')) out.n = q.get('n').slice(0, 80);
-  if (q.get('l')) {
-    const l = q.get('l');
-    if (/^https?:\/\//i.test(l)) out.l = l.slice(0, 500);
-  }
+export function toPayload({ people, t, d, n, l }) {
+  const out = { g: people.map((p) => [p.name, p.city, p.tz, p.wake, p.bed, p.work ? 1 : 0]) };
+  if (t != null) out.t = t;
+  if (d) out.d = d;
+  if (n) out.n = n;
+  if (l) out.l = l;
   return out;
 }
 
-export function buildHash({ people, t, d, n, l }) {
-  const q = new URLSearchParams();
-  q.set('g', encodeGroup(people));
-  if (t != null) q.set('t', stamp(t));
-  if (d) q.set('d', String(d));
-  if (n) q.set('n', n);
-  if (l) q.set('l', l);
-  return '#' + q.toString();
+/** Validates a decrypted payload. Never trust it blindly, even after decryption. */
+export function fromPayload(obj) {
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.g)) return null;
+  const people = cleanGroup(obj.g.map((r) => (Array.isArray(r)
+    ? { name: r[0], city: r[1], tz: r[2], wake: r[3], bed: r[4], work: r[5] }
+    : null)));
+  if (!people) return null;
+  const out = { people };
+  if (Number.isFinite(obj.t)) out.t = obj.t;
+  if (obj.d != null) out.d = clampInt(obj.d, 15, 240, 60);
+  if (typeof obj.n === 'string' && obj.n.trim()) out.n = obj.n.trim().slice(0, 80);
+  if (typeof obj.l === 'string' && /^https?:\/\//i.test(obj.l)) out.l = obj.l.slice(0, 500);
+  return out;
 }
 
-export function loadLocal(storage = globalThis.localStorage) {
+// ---------- Non-sensitive preferences ----------
+
+const PREFS_KEY = 'common-hour:prefs';
+
+export function loadPrefs(storage = globalThis.localStorage) {
   try {
-    const data = JSON.parse(storage?.getItem(STORAGE_KEY) ?? 'null');
-    if (!data) return null;
-    return { ...data, people: cleanGroup(data.people) };
+    return JSON.parse(storage?.getItem(PREFS_KEY) ?? '{}') ?? {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-export function saveLocal(data, storage = globalThis.localStorage) {
+export function savePrefs(prefs, storage = globalThis.localStorage) {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify(data));
+    storage?.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch {
-    /* private mode or full storage: the URL still carries the group */
+    /* ignore */
   }
 }

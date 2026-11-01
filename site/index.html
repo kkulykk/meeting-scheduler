@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <title>Common Hour</title>
   <meta name="description" content="Find a call time that works for 2 to 5 friends across time zones, then send the invite.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23262c5e'/%3E%3Cstop offset='.5' stop-color='%23e97a6a'/%3E%3Cstop offset='1' stop-color='%2386c5f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='10' width='28' height='12' rx='6' fill='url(%23g)'/%3E%3Crect x='13' y='6' width='6' height='20' rx='2' fill='none' stroke='%23171b34' stroke-width='2'/%3E%3C/svg%3E">
@@ -19,12 +22,70 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <span class="brand-name">Common Hour</span>
     </div>
-    <div class="top-actions">
+    <div class="top-actions" id="top-actions" hidden>
       <button type="button" class="btn ghost" id="clock-toggle" aria-pressed="false">12-hour clock</button>
       <button type="button" class="btn" id="share-group">Copy group link</button>
+      <button type="button" class="btn primary" id="create-own" hidden>Create your group</button>
+      <button type="button" class="btn" id="lock-btn" title="Forget the key on this device until the passphrase is entered again">Lock</button>
     </div>
   </header>
 
+  <section class="lock" id="lock" aria-labelledby="lock-title">
+    <div class="lock-card">
+      <div class="lock-art" aria-hidden="true"><span></span></div>
+      <h1 id="lock-title">Your group, for your eyes only</h1>
+      <p class="lock-text" id="lock-text">Loading…</p>
+      <p class="form-error" id="lock-error" role="alert" hidden></p>
+
+      <div class="lock-actions" id="lock-welcome" hidden>
+        <button type="button" class="btn primary" id="start-create">Create your group</button>
+        <button type="button" class="btn" id="start-example">Try with example friends</button>
+      </div>
+
+      <form id="unlock-form" class="lock-form" hidden novalidate>
+        <div class="field">
+          <label for="unlock-pass">Group passphrase</label>
+          <input id="unlock-pass" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
+        </div>
+        <label class="check" for="unlock-remember">
+          <input id="unlock-remember" type="checkbox" checked>
+          Remember on this device (leave unticked on shared computers)
+        </label>
+        <p class="form-error" id="unlock-error" role="alert"></p>
+        <p class="form-wait" id="unlock-wait" aria-live="polite"></p>
+        <button type="submit" class="btn primary" id="unlock-btn">Unlock</button>
+      </form>
+
+      <form id="create-form" class="lock-form" hidden novalidate>
+        <div class="field">
+          <label for="create-pass">Group passphrase</label>
+          <div class="pass-row">
+            <input id="create-pass" type="text" autocomplete="new-password" autocapitalize="off" spellcheck="false" required>
+            <button type="button" class="btn small" id="create-copy">Copy</button>
+            <button type="button" class="btn small ghost" id="create-regen">New one</button>
+          </div>
+          <p class="field-hint">We generated a strong one for you. You can type your own instead (at least 14 characters).</p>
+        </div>
+        <label class="check" for="create-saved">
+          <input id="create-saved" type="checkbox">
+          I saved this passphrase. If it is lost, the group cannot be recovered.
+        </label>
+        <label class="check" for="create-remember">
+          <input id="create-remember" type="checkbox" checked>
+          Remember on this device
+        </label>
+        <p class="form-error" id="create-error" role="alert"></p>
+        <div class="lock-actions">
+          <button type="submit" class="btn primary" id="create-btn">Create group</button>
+          <button type="button" class="btn ghost" id="create-back">Back</button>
+        </div>
+      </form>
+
+      <button type="button" class="linkish" id="forget-device" hidden>Remove the saved group from this device</button>
+    </div>
+  </section>
+
+  <div id="app" hidden>
   <main>
     <section class="hero" aria-labelledby="hero-title">
       <h1 id="hero-title"></h1>
@@ -131,8 +192,9 @@
   </main>
 
   <footer class="foot">
-    <p>No accounts and no calendars. Your group lives in the link and in this browser.</p>
+    <p>End-to-end encrypted with your group passphrase (AES-256-GCM). No accounts, no server, no calendars.</p>
   </footer>
+  </div>
 
   <dialog id="group-dialog" aria-labelledby="gd-title">
     <form method="dialog" id="group-form">

@@ -4,7 +4,7 @@ import {
   offsetMinutes, zonedToUtc, localDayStarts, clockChanges, formatTime, hoursPhrase, offsetLabel, HOUR,
 } from '../site/js/time.js';
 import { statusAt, scanSlots, pickSuggestions, verdict } from '../site/js/schedule.js';
-import { EXAMPLE_GROUP, encodeGroup, decodeGroup, readHash, buildHash } from '../site/js/state.js';
+import { EXAMPLE_GROUP, toPayload, fromPayload } from '../site/js/state.js';
 import { buildIcs, foldLine } from '../site/js/invite.js';
 
 test('offsets follow DST per zone', () => {
@@ -62,16 +62,15 @@ test('suggestions for New Orleans to Kyiv land on the weekend', () => {
   }
 });
 
-test('group survives a round trip through the URL, including Cyrillic', () => {
+test('payload round trip validates everything, including Cyrillic names', () => {
   const group = [...EXAMPLE_GROUP.slice(0, 4), { ...EXAMPLE_GROUP[4], name: 'Оксана' }];
-  assert.deepEqual(decodeGroup(encodeGroup(group)), group);
-  const hash = buildHash({ people: group, t: Date.UTC(2026, 10, 8, 17), d: 45, n: 'Catch-up' });
-  const back = readHash(hash);
+  const back = fromPayload(toPayload({ people: group, t: Date.UTC(2026, 10, 8, 17), d: 45, n: 'Catch-up' }));
+  assert.deepEqual(back.people, group);
   assert.equal(back.t, Date.UTC(2026, 10, 8, 17));
   assert.equal(back.d, 45);
-  assert.equal(back.people[4].name, 'Оксана');
-  assert.equal(decodeGroup('not-valid'), null);
-  assert.equal(readHash('#l=javascript:alert(1)').l, undefined);
+  assert.equal(fromPayload({ g: [['A', 'X', 'Not/AZone', 8, 23, 1]] }), null);
+  assert.equal(fromPayload({ ...toPayload({ people: group }), l: 'javascript:alert(1)' }).l, undefined);
+  assert.equal(fromPayload('nope'), null);
 });
 
 test('ics output', () => {
