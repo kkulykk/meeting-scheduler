@@ -24,7 +24,10 @@
       <span class="chip mode-chip" id="mode-chip" hidden>Private preset</span>
     </div>
     <div class="top-actions">
-      <button type="button" class="btn ghost" id="clock-toggle" aria-pressed="false">12-hour clock</button>
+      <div class="seg" role="group" aria-label="Clock format">
+        <button type="button" class="seg-btn" id="clock-24" aria-pressed="true" title="Show times like 18:30">24h</button>
+        <button type="button" class="seg-btn" id="clock-12" aria-pressed="false" title="Show times like 6:30 PM">12h</button>
+      </div>
     </div>
   </header>
 
@@ -52,6 +55,30 @@
     </div>
   </section>
 
+  <section class="invite-view" id="invite-view" hidden aria-labelledby="iv-title">
+    <div class="iv-card" id="iv-card">
+      <p class="eyebrow" id="iv-eyebrow">You're invited</p>
+      <h1 id="iv-title">Catch-up call</h1>
+      <div class="iv-when">
+        <p class="iv-day" id="iv-day"></p>
+        <p class="iv-time" id="iv-time"></p>
+        <p class="iv-zone" id="iv-zone"></p>
+      </div>
+      <p class="iv-count" id="iv-count" aria-live="polite"></p>
+      <div class="iv-actions">
+        <a class="btn primary" id="iv-join" target="_blank" rel="noopener" href="#" hidden>Join call</a>
+        <a class="btn" id="iv-ics" download="call.ics" href="#">Add to calendar</a>
+        <a class="btn" id="iv-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
+        <a class="btn" id="iv-outlook" target="_blank" rel="noopener" href="#">Outlook</a>
+      </div>
+    </div>
+    <div class="iv-others" id="iv-others" hidden>
+      <h2>Everyone else's time</h2>
+      <ul class="iv-places" id="iv-places"></ul>
+    </div>
+    <button type="button" class="linkish" id="iv-plan">Doesn't work for you? Plan a different time</button>
+  </section>
+
   <div id="app" hidden>
   <main>
     <section class="hero" aria-labelledby="hero-title">
@@ -59,27 +86,20 @@
       <p class="lede" id="hero-lede"></p>
     </section>
 
-    <section class="invite" id="invite" hidden aria-labelledby="invite-title">
-      <div class="invite-body">
-        <p class="eyebrow">You were sent a time</p>
-        <h2 id="invite-title"></h2>
-        <p class="invite-when" id="invite-when"></p>
-        <p class="invite-count" id="invite-count"></p>
-      </div>
-      <div class="invite-actions">
-        <a class="btn primary" id="invite-ics" download="call.ics" href="#">Add to my calendar</a>
-        <a class="btn" id="invite-google" target="_blank" rel="noopener" href="#">Google Calendar</a>
-        <a class="btn" id="invite-join" target="_blank" rel="noopener" href="#" hidden>Join call</a>
-        <button type="button" class="btn ghost" id="invite-close">Dismiss</button>
-      </div>
-    </section>
-
     <section class="roster" id="roster" aria-labelledby="roster-title">
-      <div class="section-head">
+      <div class="section-head roster-head">
         <h2 id="roster-title">Who's on the call</h2>
         <span class="roster-count" id="roster-count"></span>
+        <button type="button" class="btn small roster-toggle" id="roster-toggle"
+                aria-expanded="true" aria-controls="roster-body">
+          <span id="roster-toggle-text">Collapse</span>
+          <svg class="chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
-      <div class="roster-rows" id="roster-rows"></div>
+      <button type="button" class="roster-summary" id="roster-summary" hidden aria-label="Edit who's on the call"></button>
+      <div class="roster-body" id="roster-body">
+        <div class="roster-rows" id="roster-rows"></div>
+      </div>
       <div class="roster-foot">
         <button type="button" class="btn" id="roster-add">Add a person</button>
         <span class="spacer"></span>

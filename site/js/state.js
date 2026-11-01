@@ -69,14 +69,32 @@ export function fromPayload(obj) {
 
 const stamp = (ms) => new Date(ms).toISOString().slice(0, 16) + 'Z';
 
-/** "#t=2026-11-08T17:00Z&d=60&n=Catch-up+call&l=https://…" */
-export function buildTimeHash({ t, d, n, l }) {
+/** "#t=2026-11-08T17:00Z&d=60&n=Catch-up+call&l=https://…&z=Warsaw~Europe/Warsaw|Kyiv~Europe/Kyiv"
+ *  `places` are cities only (never people's names), so friends can see each other's local time. */
+export function buildTimeHash({ t, d, n, l, places }) {
   const q = new URLSearchParams();
   q.set('t', stamp(t));
   if (d) q.set('d', String(d));
   if (n) q.set('n', n);
   if (l) q.set('l', l);
+  const z = uniquePlaces(places ?? []).map((p) => `${p.city.replace(/[~|]/g, ' ')}~${p.tz}`).join('|');
+  if (z) q.set('z', z);
   return '#' + q.toString();
+}
+
+function uniquePlaces(list) {
+  const seen = new Set();
+  const out = [];
+  for (const p of list) {
+    const tz = normalizeZone(p?.tz);
+    const city = String(p?.city ?? '').trim().slice(0, 40);
+    const key = `${city.toLowerCase()}|${tz}`;
+    if (!tz || !city || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ city, tz });
+    if (out.length === MAX_PEOPLE) break;
+  }
+  return out;
 }
 
 export function readTimeHash(params) {
@@ -88,6 +106,11 @@ export function readTimeHash(params) {
   if (n) out.n = n.slice(0, 80);
   const l = params.get('l') ?? '';
   if (/^https?:\/\//i.test(l)) out.l = l.slice(0, 500);
+  const places = uniquePlaces((params.get('z') ?? '').split('|').filter(Boolean).map((item) => {
+    const [city, tz] = item.split('~');
+    return { city, tz };
+  }));
+  if (places.length) out.places = places;
   return out;
 }
 

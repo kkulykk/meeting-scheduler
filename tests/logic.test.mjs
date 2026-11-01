@@ -79,6 +79,13 @@ test('public time links carry the time only, never people', () => {
   const back = readTimeHash(new URLSearchParams(hash.slice(1)));
   assert.deepEqual(back, { t: Date.UTC(2026, 10, 8, 17), d: 45, n: 'Catch-up', l: 'https://meet.example/abc' });
   assert.equal(readTimeHash(new URLSearchParams('t=nope')), null);
+  const withPlaces = buildTimeHash({
+    t: 0, places: [{ city: 'New Orleans', tz: 'America/Chicago' }, { city: 'Kyiv', tz: 'Europe/Kyiv' },
+      { city: 'Kyiv', tz: 'Europe/Kyiv' }, { city: 'Nowhere', tz: 'Mars/Base' }],
+  });
+  assert.deepEqual(readTimeHash(new URLSearchParams(withPlaces.slice(1))).places,
+    [{ city: 'New Orleans', tz: 'America/Chicago' }, { city: 'Kyiv', tz: 'Europe/Kyiv' }]);
+  assert.ok(!/name|Roman/i.test(withPlaces));
   assert.equal(readTimeHash(new URLSearchParams('t=2026-11-08T17:00Z&l=javascript:alert(1)')).l, undefined);
 });
 
